@@ -1,0 +1,51 @@
+# Downloads and locally reconstructed runtime
+/vendor/
+/weights/
+/models/
+/data/
+/results/
+/build/
+/configs/runtime.json
+
+# Training products, caches and environments
+**/outputs/
+**/trained_models/
+**/processed/
+**/raw/
+**/logs/
+**/evaluations/
+**/venv*/
+**/.venv/
+**/.venv*/
+**/.cache/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Large binary artifacts and profiler captures
+*.gguf
+*.safetensors
+*.pt
+*.pth
+*.bin
+*.o
+*.so
+*.a
+*.nsys-rep
+*.sqlite
+*.log
+*.tar.gz
+*.zip
+
+# Credentials and editor/OS files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.ssh/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
