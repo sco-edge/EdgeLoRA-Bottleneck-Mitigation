@@ -1,0 +1,22 @@
+{
+  "binary": "vendor/EdgeLoRA/edgelora/llama-server",
+  "base_model": "weights/base-q4_0.gguf",
+  "task_adapters": [
+    "weights/securecode.gguf",
+    "weights/math.gguf",
+    "weights/ifeval.gguf",
+    "weights/bbh.gguf",
+    "weights/gpqa.gguf",
+    "weights/mmlupro.gguf"
+  ],
+  "router_adapter": "weights/router.gguf",
+  "router_classifier": "weights/router-classifier.bin",
+  "slot_save_path": "results/slots",
+  "context_size": 2048,
+  "batch_size": 512,
+  "micro_batch_size": 512,
+  "parallel_slots": 2,
+  "adapter_cache_size": 2,
+  "threads": 4,
+  "gpu_layers": 99
+}
