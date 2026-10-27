@@ -1,0 +1,11 @@
+{
+  "HuggingFaceH4/no_robots": "e6f9a4ac5c37faeb744ba9ecf0473184d7f8105b",
+  "kaist-ai/CoT-Collection": "c9d352cdc119df4a4f7526d100e4acb4a72a7a5c",
+  "allenai/ai2_arc": "210d026faf9955653af8916fad021475a3f00453",
+  "allenai/sciq": "2c94ad3e1aafab77146f384e23536f97a4849815",
+  "allenai/openbookqa": "388097ea7776314e93a529163e0fea805b8a6454",
+  "tau/commonsense_qa": "94630fe30dad47192a8546eb75f094926d47e155",
+  "Rowan/hellaswag": "218ec52e09a7e7462a5400043bb9a69a41d06b76",
+  "allenai/winogrande": "01e74176c63542e6b0bcb004dcdea22d94fb67b5",
+  "ivitopow/SecuCoder": "7d5149ab257ad938384cacef9fd1827174630d0d"
+}

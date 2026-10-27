@@ -1,0 +1,63 @@
+{
+  "base_model": "meta-llama/Llama-3.2-3B-Instruct",
+  "num_labels": 6,
+  "adapter_id_name_mapping": {
+    "0": "securecode",
+    "1": "math",
+    "2": "ifeval",
+    "3": "bbh",
+    "4": "gpqa",
+    "5": "mmlupro"
+  },
+  "seed": 42,
+  "data_seed": 42,
+  "used_rows": {
+    "train": 1364,
+    "validation": 302
+  },
+  "max_steps": 3410,
+  "batch_size": 4,
+  "micro_batch_size": 1,
+  "gradient_accumulation_steps": 4,
+  "learning_rate": 1e-05,
+  "lora": {
+    "r": 16,
+    "alpha": 32,
+    "dropout": 0.05,
+    "target_modules": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj",
+      "gate_proj",
+      "up_proj",
+      "down_proj"
+    ]
+  },
+  "cutoff_length": 512,
+  "dtype": "torch.float16",
+  "problem_type": "multi_label_classification",
+  "versions": {
+    "transformers": "4.45.2",
+    "torch": "2.4.1+cu121",
+    "peft": "0.13.2"
+  },
+  "data_directory": "adapter-router/processed/six_label_router_full_v2_prompt_v2",
+  "input_files": {
+    "train.jsonl": {
+      "sha256": "26dbd2ebe31a7aff567c00c46cf3fb366865aaf9fda427184fb57feab4ad2ee2",
+      "rows": 1364
+    },
+    "validation.jsonl": {
+      "sha256": "c5e1847d9c4f53cdfa70f9a1fbf29a1cc1be37acedadf04ed6f636ac6c718d7d",
+      "rows": 302
+    },
+    "stats.json": {
+      "sha256": "5aa6c7f5e00265c6fc3a4cb2aaeb9b4d7ec24cf60c401a1989d9d77cefd1796d"
+    },
+    "manifest.json": {
+      "sha256": "3858cf434719ed0c5d85f94671c69898353b4c97f8c271a018131215280b558e"
+    }
+  },
+  "classifier_sha256": "1acabe1585878f870ff7757e28258799697fa34c72170e1c895a208424233fd8"
+}

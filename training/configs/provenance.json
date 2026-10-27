@@ -1,0 +1,52 @@
+{
+  "base_model": {
+    "repository": "meta-llama/Llama-3.2-3B-Instruct",
+    "revision": "0cb88a4f764b7a12671c53f0838cd831a0843b95"
+  },
+  "task_ids": {
+    "0": "securecode",
+    "1": "math",
+    "2": "ifeval",
+    "3": "bbh",
+    "4": "gpqa",
+    "5": "mmlupro"
+  },
+  "router_adapter_id": 6,
+  "adapter_storage": "f32",
+  "checkpoint_sha256": {
+    "securecode": "bdda85262141c3827b90b751e53b1b0c415da17b0f2a60dbde57919560fc3368",
+    "math": "5fae6918638262d1b3157a811d1b2f698aff443c5e5793c98e06782499313676",
+    "ifeval": "e5937cf6c7d2c8fdf2750034e2e45f3c4ca8f45e19273cdc31e968b8228e1059",
+    "bbh": "0f8912abec03ccc4ebff4a1a9b6668a8417bb8f963200cd4d8e790154e0c26d1",
+    "gpqa": "0b032d5ecd7bde2b6797dfa6b54f52540213f8beb1592f469afce796e7ce77e7",
+    "mmlupro": "faa5e40e4fd2efbbada613fa3fd07356cf27dcb04753e534df636699b061606b",
+    "router": "7508dfd5757f3bbd53bb97082490198eb6091c4537854579cbe4051cc75c50ef"
+  },
+  "deployment_sha256": {
+    "gpqa.gguf": "deeb23140c449abd3911a08f788159358cd6661c6389e16ae66657e1e4983aa7",
+    "router-classifier.bin": "7f70aa517df4b6d9015c17542e45f36f9631478620a723d367dfe010926f5cb2",
+    "math.gguf": "436e245649cc9011b4b7d0dbb955ee83c577b9b0fa1690d18221bfff96bd18b3",
+    "router.gguf": "7b4880235d4a0868bd0395b70842d242f4903f01cab47b0f32b060c3c4b8b816",
+    "ifeval.gguf": "61b5839c4641051306fe5dcecc0c412ab8476c9fa4fa17ef17e2d7b6a5ac7a2e",
+    "mmlupro.gguf": "a2e2c0ea67793607efb227a7e4071fc68ac10cc6958465b84f74f37edaf98abe",
+    "securecode.gguf": "14b40b422a0cd82ae1129bed7cb563fed52d9019eefc4bf74a16b8e11cd2297b",
+    "bbh.gguf": "de7a5c3cfeea2e407981c2d44193251cdb4774ed30cf96608694a2a997a99f2e"
+  },
+  "source_file_sha256": {
+    "adapter-training/train_task_adapter.py": "763d00a34fe2aed043f413ff75aa847ac47b0b318dbe05fd671204fd1fbae40c",
+    "adapter-training/prepare_task_adapter_data.py": "4a798adf966d205792dba16f286aaed0e6950af3ad73cdf1bf962f5a73263984",
+    "adapter-training/prepare_securecode_math_data.py": "30be907b69d1a2a49ffed351d89c9c4458e2841ac98fb734db38f964a76ee967",
+    "adapter-training/prepare_securecode_v2.py": "68a750de46aa918b17532e18bc1e314cdd8d729bea5a8fea664ab541d2e22bf5",
+    "adapter-training/download_secucoder.py": "ffef80e008883594f3a2470335364b37476130a559d9dfb6d295ed11d7724047",
+    "adapter-training/cross_profile_task_adapters.py": "2a79b4f1ae4a887146f2b3c19f90344793008ca038c57830753211a9fb24543f",
+    "adapter-training/evaluate_task_adapter.py": "9545674580dd1e779ca9a0ab9359633c80db4e07f882488732b1bc3c1ed12261",
+    "adapter-router/train_six_label_router_smoke.py": "44c0bc1f9c5d1d16a8d3ef1c070e3df69f5d55aa6d17c0757403a38925301a4a",
+    "adapter-router/prepare_six_label_router_full_v2.py": "e24e352a22f295f2a7e18b24e11952d110cef8361b88c8698e3118bb172e0c76",
+    "adapter-router/prepare_six_label_router_profile_groups.py": "6cc6956ac5b799e9bb68b308933307ee4817002710310c1f0a65eb960fb99f4a"
+  },
+  "verification": "Checkpoint hashes were re-read from the RTX host and matched the deployment manifest on 2026-10-27.",
+  "release_changes": [
+    "train_task_adapter.py, evaluate_task_adapter.py, and cross_profile_task_adapters.py add --model for a local pinned snapshot; training, generation, and scoring logic is unchanged.",
+    "convert_deployment_artifacts.py is a new portable wrapper based on the archived conversion procedure."
+  ]
+}

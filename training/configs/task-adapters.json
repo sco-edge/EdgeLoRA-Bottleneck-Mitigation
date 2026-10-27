@@ -1,0 +1,404 @@
+{
+  "securecode": {
+    "task": "securecode",
+    "model": "meta-llama/Llama-3.2-3B-Instruct",
+    "smoke": false,
+    "seed": 42,
+    "train_rows": 4238,
+    "validation_rows": 431,
+    "cutoff_len": 512,
+    "tokenization_statistics": {
+      "train": {
+        "cutoff": 512,
+        "rows": 4238,
+        "truncation_rows": 1009,
+        "assistant_full_loss_rows": 0,
+        "input_tokens": {
+          "mean": 911.3898065125059,
+          "p50": 311.0,
+          "p95": 4821.749999999998,
+          "p99": 5953.63,
+          "max": 19134
+        },
+        "assistant_tokens": {
+          "mean": 755.9358187824446,
+          "p50": 128.0,
+          "p95": 4704.2499999999945,
+          "p99": 5820.900000000003,
+          "max": 19059
+        }
+      },
+      "validation": {
+        "cutoff": 512,
+        "rows": 431,
+        "truncation_rows": 183,
+        "assistant_full_loss_rows": 0,
+        "input_tokens": {
+          "mean": 1245.447795823666,
+          "p50": 439,
+          "p95": 4791.5,
+          "p99": 6041.799999999998,
+          "max": 7069
+        },
+        "assistant_tokens": {
+          "mean": 1110.0092807424594,
+          "p50": 220,
+          "p95": 4671.0,
+          "p99": 5900.5999999999985,
+          "max": 6995
+        }
+      }
+    },
+    "lora": {
+      "r": 16,
+      "alpha": 32,
+      "dropout": 0.05,
+      "target_modules": [
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "up_proj",
+        "down_proj"
+      ]
+    },
+    "trainable_lora_parameters": 24313856,
+    "frozen_parameters": 3212749824
+  },
+  "math": {
+    "task": "math",
+    "model": "meta-llama/Llama-3.2-3B-Instruct",
+    "smoke": false,
+    "seed": 42,
+    "train_rows": 8000,
+    "validation_rows": 500,
+    "cutoff_len": 512,
+    "tokenization_statistics": {
+      "train": {
+        "cutoff": 512,
+        "rows": 8000,
+        "truncation_rows": 748,
+        "assistant_full_loss_rows": 0,
+        "input_tokens": {
+          "mean": 274.498875,
+          "p50": 214.0,
+          "p95": 667.0499999999993,
+          "p99": 963.0400000000009,
+          "max": 2070
+        },
+        "assistant_tokens": {
+          "mean": 154.476,
+          "p50": 91.0,
+          "p95": 538.0499999999993,
+          "p99": 825.0100000000002,
+          "max": 1942
+        }
+      },
+      "validation": {
+        "cutoff": 512,
+        "rows": 500,
+        "truncation_rows": 39,
+        "assistant_full_loss_rows": 0,
+        "input_tokens": {
+          "mean": 263.096,
+          "p50": 211.0,
+          "p95": 655.5499999999995,
+          "p99": 936.1099999999999,
+          "max": 1247
+        },
+        "assistant_tokens": {
+          "mean": 143.512,
+          "p50": 89.0,
+          "p95": 505.49999999999955,
+          "p99": 803.06,
+          "max": 1015
+        }
+      }
+    },
+    "lora": {
+      "r": 16,
+      "alpha": 32,
+      "dropout": 0.05,
+      "target_modules": [
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "up_proj",
+        "down_proj"
+      ]
+    },
+    "trainable_lora_parameters": 24313856,
+    "frozen_parameters": 3212749824
+  },
+  "ifeval": {
+    "task": "ifeval",
+    "model": "meta-llama/Llama-3.2-3B-Instruct",
+    "smoke": false,
+    "seed": 42,
+    "train_rows": 8000,
+    "validation_rows": 500,
+    "cutoff_len": 512,
+    "tokenization_statistics": {
+      "train": {
+        "cutoff": 512,
+        "rows": 8000,
+        "truncation_rows": 1011,
+        "assistant_full_loss_rows": 0,
+        "input_tokens": {
+          "mean": 297.809375,
+          "p50": 263.5,
+          "p95": 601.0,
+          "p99": 782.0,
+          "max": 1315
+        },
+        "assistant_tokens": {
+          "mean": 180.85675,
+          "p50": 136.0,
+          "p95": 474.0,
+          "p99": 594.0,
+          "max": 1243
+        }
+      },
+      "validation": {
+        "cutoff": 512,
+        "rows": 500,
+        "truncation_rows": 59,
+        "assistant_full_loss_rows": 0,
+        "input_tokens": {
+          "mean": 292.864,
+          "p50": 266.5,
+          "p95": 590.1499999999999,
+          "p99": 702.02,
+          "max": 1005
+        },
+        "assistant_tokens": {
+          "mean": 175.538,
+          "p50": 134.0,
+          "p95": 465.0999999999999,
+          "p99": 539.02,
+          "max": 632
+        }
+      }
+    },
+    "lora": {
+      "r": 16,
+      "alpha": 32,
+      "dropout": 0.05,
+      "target_modules": [
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "up_proj",
+        "down_proj"
+      ]
+    },
+    "trainable_lora_parameters": 24313856,
+    "frozen_parameters": 3212749824
+  },
+  "bbh": {
+    "task": "bbh",
+    "model": "meta-llama/Llama-3.2-3B-Instruct",
+    "smoke": false,
+    "seed": 42,
+    "train_rows": 8000,
+    "validation_rows": 500,
+    "cutoff_len": 512,
+    "tokenization_statistics": {
+      "train": {
+        "cutoff": 512,
+        "rows": 8000,
+        "truncation_rows": 444,
+        "assistant_full_loss_rows": 0,
+        "input_tokens": {
+          "mean": 256.908875,
+          "p50": 223.0,
+          "p95": 522.0499999999993,
+          "p99": 616.0,
+          "max": 1217
+        },
+        "assistant_tokens": {
+          "mean": 63.09625,
+          "p50": 54.0,
+          "p95": 138.0,
+          "p99": 192.0,
+          "max": 1016
+        }
+      },
+      "validation": {
+        "cutoff": 512,
+        "rows": 500,
+        "truncation_rows": 31,
+        "assistant_full_loss_rows": 0,
+        "input_tokens": {
+          "mean": 264.872,
+          "p50": 227.5,
+          "p95": 531.05,
+          "p99": 616.02,
+          "max": 666
+        },
+        "assistant_tokens": {
+          "mean": 63.888,
+          "p50": 54.0,
+          "p95": 146.04999999999995,
+          "p99": 171.01999999999998,
+          "max": 181
+        }
+      }
+    },
+    "lora": {
+      "r": 16,
+      "alpha": 32,
+      "dropout": 0.05,
+      "target_modules": [
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "up_proj",
+        "down_proj"
+      ]
+    },
+    "trainable_lora_parameters": 24313856,
+    "frozen_parameters": 3212749824
+  },
+  "gpqa": {
+    "task": "gpqa",
+    "model": "meta-llama/Llama-3.2-3B-Instruct",
+    "smoke": false,
+    "seed": 42,
+    "train_rows": 8000,
+    "validation_rows": 500,
+    "cutoff_len": 512,
+    "tokenization_statistics": {
+      "train": {
+        "cutoff": 512,
+        "rows": 8000,
+        "truncation_rows": 69,
+        "assistant_full_loss_rows": 0,
+        "input_tokens": {
+          "mean": 147.551,
+          "p50": 119.0,
+          "p95": 317.0,
+          "p99": 496.0,
+          "max": 852
+        },
+        "assistant_tokens": {
+          "mean": 55.581875,
+          "p50": 15.0,
+          "p95": 224.0,
+          "p99": 404.02000000000044,
+          "max": 755
+        }
+      },
+      "validation": {
+        "cutoff": 512,
+        "rows": 500,
+        "truncation_rows": 3,
+        "assistant_full_loss_rows": 0,
+        "input_tokens": {
+          "mean": 141.276,
+          "p50": 117.0,
+          "p95": 286.3499999999997,
+          "p99": 455.1299999999999,
+          "max": 655
+        },
+        "assistant_tokens": {
+          "mean": 50.014,
+          "p50": 18.5,
+          "p95": 201.19999999999982,
+          "p99": 366.15999999999985,
+          "max": 573
+        }
+      }
+    },
+    "lora": {
+      "r": 16,
+      "alpha": 32,
+      "dropout": 0.05,
+      "target_modules": [
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "up_proj",
+        "down_proj"
+      ]
+    },
+    "trainable_lora_parameters": 24313856,
+    "frozen_parameters": 3212749824
+  },
+  "mmlupro": {
+    "task": "mmlupro",
+    "model": "meta-llama/Llama-3.2-3B-Instruct",
+    "smoke": false,
+    "seed": 42,
+    "train_rows": 8000,
+    "validation_rows": 500,
+    "cutoff_len": 512,
+    "tokenization_statistics": {
+      "train": {
+        "cutoff": 512,
+        "rows": 8000,
+        "truncation_rows": 0,
+        "assistant_full_loss_rows": 0,
+        "input_tokens": {
+          "mean": 147.810875,
+          "p50": 95.0,
+          "p95": 348.0,
+          "p99": 377.0,
+          "max": 427
+        },
+        "assistant_tokens": {
+          "mean": 13.847625,
+          "p50": 5.0,
+          "p95": 50.0,
+          "p99": 61.0,
+          "max": 87
+        }
+      },
+      "validation": {
+        "cutoff": 512,
+        "rows": 500,
+        "truncation_rows": 0,
+        "assistant_full_loss_rows": 0,
+        "input_tokens": {
+          "mean": 151.902,
+          "p50": 95.0,
+          "p95": 349.0,
+          "p99": 379.0,
+          "max": 393
+        },
+        "assistant_tokens": {
+          "mean": 14.748,
+          "p50": 5.0,
+          "p95": 51.049999999999955,
+          "p99": 62.00999999999999,
+          "max": 75
+        }
+      }
+    },
+    "lora": {
+      "r": 16,
+      "alpha": 32,
+      "dropout": 0.05,
+      "target_modules": [
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "up_proj",
+        "down_proj"
+      ]
+    },
+    "trainable_lora_parameters": 24313856,
+    "frozen_parameters": 3212749824
+  }
+}
