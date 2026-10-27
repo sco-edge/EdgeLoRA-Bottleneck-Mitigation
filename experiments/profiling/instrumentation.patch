@@ -1,0 +1,68 @@
+--- a/src/llama.cpp
++++ b/src/llama.cpp
+@@ -1,3 +1,4 @@
++#include "../lcp_profile.h"
+ #include "llama-impl.h"
+ #include "llama-vocab.h"
+ #include "llama-sampling.h"
+@@ -8848,6 +8849,7 @@
+     // cur is a 2D tensor with shape [n_embd, n_batch]
+     // w is a 2D tensor with shape [n_embd, n_embd]
+     struct ggml_tensor *res = ggml_mul_mat(ctx0, w, cur);
++    lcp_scope lcp_lora_scope("LCP/CPU/LORA_BUILD");
+     int n = cur->ne[1];  // Assuming ne[1] represents batch size
+     if (lctx.batch_lora) {
+         // Assuming cur has batch size n, and lctx.adapter_ids contains n
+@@ -16464,7 +16466,8 @@
+         ggml_backend_sched_reset(lctx.sched);
+         ggml_backend_sched_set_eval_callback(lctx.sched, lctx.cparams.cb_eval, lctx.cparams.cb_eval_user_data);
+ 
+-        ggml_cgraph * gf = llama_build_graph(lctx, ubatch, false);
++        ggml_cgraph * gf;
++        { lcp_scope scope("LCP/CPU/GRAPH_BUILD"); gf = llama_build_graph(lctx, ubatch, false); }
+ 
+         // the output is always the last tensor in the graph
+         struct ggml_tensor * res  = gf->nodes[gf->n_nodes - 1];
+@@ -16499,11 +16502,11 @@
+         }
+         // LLAMA_LOG_INFO("graph build time: %.3f ms (%d nodes, %d leafs)\n", (ggml_time_us() - t_start_us)/1000.0, gf->n_nodes, gf->n_leafs);
+ 
+-        ggml_backend_sched_alloc_graph(lctx.sched, gf);
+-
+-        llama_set_inputs(lctx, ubatch);
+-
+-        llama_graph_compute(lctx, gf, n_threads, threadpool);
++        { lcp_scope scope("LCP/CPU/ALLOC"); ggml_backend_sched_alloc_graph(lctx.sched, gf); }
++
++        { lcp_scope scope("LCP/CPU/SET_INPUTS"); llama_set_inputs(lctx, ubatch); }
++
++        { lcp_scope scope("LCP/CPU/SUBMIT"); llama_graph_compute(lctx, gf, n_threads, threadpool); }
+ 
+         // update the kv ring buffer
+         {
+@@ -17039,7 +17042,7 @@
+ 
+             ggml_cgraph * gf = llama_build_graph_k_shift(lctx);
+ 
+-            ggml_backend_sched_alloc_graph(lctx.sched, gf);
++            { lcp_scope scope("LCP/CPU/ALLOC"); ggml_backend_sched_alloc_graph(lctx.sched, gf); }
+ 
+             llama_set_k_shift(lctx);
+ 
+--- a/ggml/src/ggml-cuda.cu
++++ b/ggml/src/ggml-cuda.cu
+@@ -1,3 +1,4 @@
++#include "../../lcp_profile.h"
+ #include "ggml-cuda.h"
+ #include "ggml.h"
+ #include "ggml-backend-impl.h"
+@@ -2644,7 +2645,8 @@
+                 }
+ #endif
+ 
+-                bool ok = ggml_cuda_compute_forward(*cuda_ctx, node);
++                bool ok;
++                { lcp_node_scope scope(node); ok = ggml_cuda_compute_forward(*cuda_ctx, node); }
+                 if (!ok) {
+                     GGML_CUDA_LOG_ERROR("%s: op not supported %s (%s)\n", __func__, node->name, ggml_op_name(node->op));
+                 }
