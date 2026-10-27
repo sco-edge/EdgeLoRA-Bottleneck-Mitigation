@@ -1,0 +1,169 @@
+{
+  "description": "Original experiment source SHA-256 values recorded during release preparation. Relative source names identify historical runs; private machine paths are intentionally omitted.",
+  "sources": [
+    {
+      "path": "run_latest_throughput_20261014.py",
+      "sha256": "833c88f184a7e06a1d9d7298f686c41caab5c5fb1abc20fc57861a40ff870386",
+      "bytes": 4484
+    },
+    {
+      "path": "evaluation-rps-20260922-v1/run_rps.py",
+      "sha256": "a67174011f76b4022eec4af387ab6278ae408c8f4c8c52676c2ff6317c9ded58",
+      "bytes": 14735
+    },
+    {
+      "path": "throughput-latest-20261014-v1/base_rps.py",
+      "sha256": "3f536f677a794a43ad150c63e9f1248af3d1c52bd59f6e5b598ba6a850208c51",
+      "bytes": 19271
+    },
+    {
+      "path": "throughput-latest-20261014-v1/prompts.json",
+      "sha256": "2ab73ba356889b0e5c62f5f69238b285cc4caf4399a30c6432a3c47b06a4b2a3",
+      "bytes": 3892
+    },
+    {
+      "path": "evaluation-random-arrival-20261012-v1/runner.py",
+      "sha256": "6beadb1d8e3300e78c925efbac68c08ef9294024e3cccdf356341ec211cdb834",
+      "bytes": 6616
+    },
+    {
+      "path": "evaluation-random-arrival-20261012-v1/four/run_http.py",
+      "sha256": "77eea59b1c12b2c10229426eb9870cb058cd6ab9f798c2842d4704ebddceeb0f",
+      "bytes": 12372
+    },
+    {
+      "path": "evaluation-random-arrival-20261012-v1/four/base_http.py",
+      "sha256": "9fce26274c73431d4796b8f019b3edbae7fde7083c306117b818ddd40ce0eb66",
+      "bytes": 36582
+    },
+    {
+      "path": "loading-extension-20261008-v1/run.py",
+      "sha256": "798737178d5cb585dbe9aee9f5ca08766142068309a0b8e7e952f7010d797424",
+      "bytes": 19418
+    },
+    {
+      "path": "serving-extension-20261011-v1/run.py",
+      "sha256": "df53344bc6aac66bf4a2e3b96ceb92e69320a2b8f687053a481eabcfc3fc1149",
+      "bytes": 6765
+    },
+    {
+      "path": "fanout-long-20261012-v1/run.py",
+      "sha256": "efeb45fb9a12a63fcc34f531cbd47be6e583178fa6e54bf182219754e2e2382f",
+      "bytes": 6489
+    },
+    {
+      "path": "loading-overhead-random-20261012-v1/cold_probe.c",
+      "sha256": "b91e1ed7e574c916a440baeefd34811d56a2270f8b76b274ec54aae88b03ef58",
+      "bytes": 1875
+    },
+    {
+      "path": "lora-cost-20260918-v1/probe.cpp",
+      "sha256": "dfe3be4715dc781a667cc3814f3a1a19253940f55f2fcf0c54ac20408ed6696f",
+      "bytes": 17750
+    },
+    {
+      "path": "lora-cost-20260918-v1/lcp_profile.h",
+      "sha256": "1fa25e367ab64440dbf249e4dbff0590cf24cee5c8bbc16e2b436d844ef214a9",
+      "bytes": 1713
+    },
+    {
+      "path": "lora-cost-20260918-v1/instrumentation.patch",
+      "sha256": "cbdb95803ec60b6ac1dacc11b53d9b5cb83278160d27fa82597d398f0548425d",
+      "bytes": 2658
+    },
+    {
+      "path": "lora-cost-20260918-v1/plan.json",
+      "sha256": "7cd0a9e938e2faaa98580212c3c36404973851886aaf0ece93e7ec166b191ed9",
+      "bytes": 5032
+    },
+    {
+      "path": "lora-cost-20260918-v1/analyze_traces.py",
+      "sha256": "5618fa158c840f76f65d32283751a5fad9d7aec9a4b480adf632de93788127a2",
+      "bytes": 9830
+    },
+    {
+      "path": "lora-cost-20260918-v1/diagnostic.mk",
+      "sha256": "d4101d28fcf4ef664889ac5262a5f00f659de244ff13e8942fa7b915a6817708",
+      "bytes": 318
+    }
+  ],
+  "adaptations": {
+    "benchmark.py:trace": "Fixed-spacing trace function from evaluation-rps-20260922-v1/run_rps.py; final wrapper used main seed 202609230 and blocks 0..2.",
+    "benchmark.py:arrivals": "Random event-index schedules from evaluation-random-arrival-20261012-v1/runner.py.",
+    "benchmark.py:Client.stream/contract": "Final four/base_http.py streaming timing and response contract, moved into Client; assertions replaced with explicit exceptions.",
+    "benchmark.py:latency": "Cache preparation, incoming/ongoing thread callbacks, page residency and server-token gap computation extracted from four/run_http.py and loading-extension run.py; historical source-mutation/lifecycle scaffolding removed.",
+    "benchmark.py:throughput": "Final run_latest_throughput_20261014.py protocol and evaluation-rps measured/stream logic; server lifecycle external, one trial per command.",
+    "profiling/analyze_traces.py": "Original Nsight correlation and aggregation algorithm; result-root CLI replaces script-directory assumption.",
+    "cold_probe.c and profiling C++/header/patch/Makefile": "Unchanged source bytes.",
+    "profiling/plan.json": "Token arrays and teacher sequence unchanged; private absolute teacher-source path reduced to historical experiment-relative identifier."
+  },
+  "validation": "Python compilation and all --help commands passed; dry-run JSON passed; nine fixed arrival traces exactly equal original trace() outputs; 30 random event schedules and repeated schedules matched; prompt lengths 16/128/256 confirmed; synthetic SSE response-contract/empty-event filter checked. GPU runtime and profiling builds were not rerun.",
+  "release_files": [
+    {
+      "path": "benchmark.py",
+      "sha256": "7bc5584a94a28847f6934d87bb849380088986b84d60d6e7cb6650fedd5fb10e",
+      "bytes": 18147
+    },
+    {
+      "path": "cold_probe.c",
+      "sha256": "b91e1ed7e574c916a440baeefd34811d56a2270f8b76b274ec54aae88b03ef58",
+      "bytes": 1875
+    },
+    {
+      "path": "paper_results/latency.csv",
+      "sha256": "80a50db1a3d631e022d4fe1ac14b73056d3f44f4c0005678f57fc721eaf2e4a7",
+      "bytes": 4154
+    },
+    {
+      "path": "paper_results/motivation.csv",
+      "sha256": "48c3a744f29cd10fab30fdc8adfc2fde6b0ddccd43484c9ec2323d5db1acaef4",
+      "bytes": 297
+    },
+    {
+      "path": "paper_results/serving.csv",
+      "sha256": "94435b913abaeb909d4c09d4b6eeae1dd37871be24814b6eb4146a4a3f87fca6",
+      "bytes": 3469
+    },
+    {
+      "path": "profiling/analyze_traces.py",
+      "sha256": "b6b82c0df1ca42026208a411723db92caeb7a766793594019640f1d204eef703",
+      "bytes": 10078
+    },
+    {
+      "path": "profiling/diagnostic.mk",
+      "sha256": "d4101d28fcf4ef664889ac5262a5f00f659de244ff13e8942fa7b915a6817708",
+      "bytes": 318
+    },
+    {
+      "path": "profiling/instrumentation.patch",
+      "sha256": "cbdb95803ec60b6ac1dacc11b53d9b5cb83278160d27fa82597d398f0548425d",
+      "bytes": 2658
+    },
+    {
+      "path": "profiling/lcp_profile.h",
+      "sha256": "1fa25e367ab64440dbf249e4dbff0590cf24cee5c8bbc16e2b436d844ef214a9",
+      "bytes": 1713
+    },
+    {
+      "path": "profiling/plan.json",
+      "sha256": "7a0160844e00ab0463ca34b7b5a05d2931c3aa4c867db9d3c4d7b1e575d8eaf3",
+      "bytes": 4994
+    },
+    {
+      "path": "profiling/probe.cpp",
+      "sha256": "dfe3be4715dc781a667cc3814f3a1a19253940f55f2fcf0c54ac20408ed6696f",
+      "bytes": 17750
+    },
+    {
+      "path": "prompts.json",
+      "sha256": "2ab73ba356889b0e5c62f5f69238b285cc4caf4399a30c6432a3c47b06a4b2a3",
+      "bytes": 3892
+    },
+    {
+      "path": "summarize.py",
+      "sha256": "feed75890d8464ee11dd983c92a5e137a757ef1837cdfdda9167729edb3f1865",
+      "bytes": 2030
+    }
+  ],
+  "release_line_endings": "Release text files use LF; original source fingerprints are retained separately."
+}
