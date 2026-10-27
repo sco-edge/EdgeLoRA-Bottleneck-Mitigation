@@ -1,0 +1,91 @@
+﻿experiment,condition,metric,configuration,median_ms,paired_reduction_percent
+serving,Repeat 6,A Max TBT,Baseline,417.308,
+serving,Repeat 6,A Max TBT,Combined,218.677,47.7113
+serving,A2 / 16,A Max TBT,Baseline,535.02625,
+serving,A2 / 16,A Max TBT,Combined,224.3045,57.5648
+serving,A4 / 16,A Max TBT,Baseline,595.08175,
+serving,A4 / 16,A Max TBT,Combined,302.1085,49.5142
+serving,A2 / 128,A Max TBT,Baseline,2936.31,
+serving,A2 / 128,A Max TBT,Combined,1307.982,55.6231
+serving,A4 / 128,A Max TBT,Baseline,3067.252,
+serving,A4 / 128,A Max TBT,Combined,1395.256625,54.5477
+serving,A2 / 256,A Max TBT,Baseline,8362.11825,
+serving,A2 / 256,A Max TBT,Combined,2539.56725,69.6471
+serving,A4 / 256,A Max TBT,Baseline,8575.95175,
+serving,A4 / 256,A Max TBT,Combined,2580.721625,69.8006
+serving,Repeat 6,A completion,Baseline,6556.7405,
+serving,Repeat 6,A completion,Combined,5322.1155,19.4088
+serving,A2 / 16,A completion,Baseline,6085.53175,
+serving,A2 / 16,A completion,Combined,5827.88525,4.4414
+serving,A4 / 16,A completion,Baseline,10984.794625,
+serving,A4 / 16,A completion,Combined,10631.674625,3.26189
+serving,A2 / 128,A completion,Baseline,8447.62725,
+serving,A2 / 128,A completion,Combined,6944.69825,17.9521
+serving,A4 / 128,A completion,Baseline,13339.406625,
+serving,A4 / 128,A completion,Combined,11777.345,11.7091
+serving,A2 / 256,A completion,Baseline,13899.689,
+serving,A2 / 256,A completion,Combined,8193.5005,41.0877
+serving,A4 / 256,A completion,Baseline,18880.838,
+serving,A4 / 256,A completion,Combined,13027.353625,31.1532
+serving,Repeat 6,B TTFT,Baseline,485.90425,
+serving,Repeat 6,B TTFT,Combined,467.901333,4.06964
+serving,A2 / 16,B TTFT,Baseline,631.3595,
+serving,A2 / 16,B TTFT,Combined,582.2195,7.10838
+serving,A4 / 16,B TTFT,Baseline,752.9775,
+serving,A4 / 16,B TTFT,Combined,773.144,-2.25276
+serving,A2 / 128,B TTFT,Baseline,3030.315,
+serving,A2 / 128,B TTFT,Combined,1698.387,43.8008
+serving,A4 / 128,B TTFT,Baseline,3188.141,
+serving,A4 / 128,B TTFT,Combined,1818.2655,42.9114
+serving,A2 / 256,B TTFT,Baseline,8456.9515,
+serving,A2 / 256,B TTFT,Combined,2932.4435,65.3121
+serving,A4 / 256,B TTFT,Baseline,8672.501,
+serving,A4 / 256,B TTFT,Combined,3037.3945,65.0618
+ablation,16 R,A Max TBT,Baseline,228.3615,
+ablation,16 R,A Max TBT,Async,227.4975,
+ablation,16 R,A Max TBT,In-place,224.974,
+ablation,16 R,A Max TBT,Combined,225.555,
+ablation,16 M,A Max TBT,Baseline,408.607,
+ablation,16 M,A Max TBT,Async,226.0905,
+ablation,16 M,A Max TBT,In-place,413.555,
+ablation,16 M,A Max TBT,Combined,217.7735,
+ablation,128 R,A Max TBT,Baseline,2605.79,
+ablation,128 R,A Max TBT,Async,2600.45,
+ablation,128 R,A Max TBT,In-place,1329.0,
+ablation,128 R,A Max TBT,Combined,1324.81,
+ablation,128 M,A Max TBT,Baseline,2791.265,
+ablation,128 M,A Max TBT,Async,2581.167,
+ablation,128 M,A Max TBT,In-place,1504.85,
+ablation,128 M,A Max TBT,Combined,1312.302,
+ablation,256 R,A Max TBT,Baseline,7990.27,
+ablation,256 R,A Max TBT,Async,7979.5,
+ablation,256 R,A Max TBT,In-place,2595.49,
+ablation,256 R,A Max TBT,Combined,2601.48,
+ablation,256 M,A Max TBT,Baseline,8162.759,
+ablation,256 M,A Max TBT,Async,7969.061,
+ablation,256 M,A Max TBT,In-place,2774.84,
+ablation,256 M,A Max TBT,Combined,2591.819,
+ablation,16 R,B TTFT,Baseline,310.58,
+ablation,16 R,B TTFT,Async,312.9825,
+ablation,16 R,B TTFT,In-place,313.9915,
+ablation,16 R,B TTFT,Combined,318.2435,
+ablation,16 M,B TTFT,Baseline,490.1455,
+ablation,16 M,B TTFT,Async,489.6095,
+ablation,16 M,B TTFT,In-place,503.923,
+ablation,16 M,B TTFT,Combined,495.5725,
+ablation,128 R,B TTFT,Baseline,2683.03,
+ablation,128 R,B TTFT,Async,2689.87,
+ablation,128 R,B TTFT,In-place,1421.05,
+ablation,128 R,B TTFT,Combined,1414.64,
+ablation,128 M,B TTFT,Baseline,2873.693,
+ablation,128 M,B TTFT,Async,2837.802,
+ablation,128 M,B TTFT,In-place,1596.963,
+ablation,128 M,B TTFT,Combined,1583.228,
+ablation,256 R,B TTFT,Baseline,8069.62,
+ablation,256 R,B TTFT,Async,8059.74,
+ablation,256 R,B TTFT,In-place,2682.29,
+ablation,256 R,B TTFT,Combined,2693.21,
+ablation,256 M,B TTFT,Baseline,8244.716,
+ablation,256 M,B TTFT,Async,8221.783,
+ablation,256 M,B TTFT,In-place,2861.413,
+ablation,256 M,B TTFT,Combined,2870.47,

@@ -1,0 +1,6 @@
+﻿panel,condition,metric,median,unit,runs
+a,resident,Max TBT,232.7,ms,30
+a,sync loading,Max TBT,543.9,ms,30
+b,16,accumulation kernel time / all GPU kernel time,20.48,%,6
+b,128,accumulation kernel time / all GPU kernel time,67.87,%,6
+b,256,accumulation kernel time / all GPU kernel time,80.57,%,6
