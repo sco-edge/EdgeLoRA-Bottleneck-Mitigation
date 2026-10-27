@@ -1,0 +1,65 @@
+{
+  "upstream_url": "https://github.com/shenzheyu/EdgeLoRA.git",
+  "upstream_commit": "b4014595598a998db345d16cc9d3407a98998c3c",
+  "source_snapshot": "lora-acc-auto-20260929-v1",
+  "patch_file": "runtime.patch",
+  "patch_sha256": "ac9c9b99264bd6ee0f548cf34c664bb4d4361815e6da3c2fdc51d568d2f981a3",
+  "files": {
+    "edgelora/Makefile": {
+      "sha256": "febe42962bc90ec379cb886b593f77921c9e00688c83b445490a587aba8022bc",
+      "size": 50050
+    },
+    "edgelora/common/CMakeLists.txt": {
+      "sha256": "e6710bd666ce8ab6f10c63f3c3d8f464869521adb212734da47c90ed4cb843dd",
+      "size": 2810
+    },
+    "edgelora/common/common.cpp": {
+      "sha256": "b2842ad814a56f5a7c565da28bfa5b5ac2d8f2c213139146cfbc787dfb01dabf",
+      "size": 159576
+    },
+    "edgelora/common/common.h": {
+      "sha256": "94d2a81bb42f2b211c1c30cccdd80d52e6fa745abb14bd66848bb703ac1dd500",
+      "size": 25235
+    },
+    "edgelora/common/router-classifier.cpp": {
+      "sha256": "ace20db365abd1cc8f26912769487dfb34c0c3173ab33cc3ceb5457a496fba39",
+      "size": 6038
+    },
+    "edgelora/common/router-classifier.h": {
+      "sha256": "73e498ba21ebb396c00c6c64c6ef85d24dac58ff579fc8559f925ac1cb970787",
+      "size": 1167
+    },
+    "edgelora/convert_lora_to_gguf.py": {
+      "sha256": "2830bc64b4ea9d7a97319a30d663f0d120934c9bcc5cf5ef34b16a546d0e5275",
+      "size": 16223
+    },
+    "edgelora/examples/server/server.cpp": {
+      "sha256": "8976d61f2e0bafd3e5c6bbb28a854a709fc4de2e418bd1ca5416e058da43146f",
+      "size": 176823
+    },
+    "edgelora/ggml/src/ggml-cuda/acc.cu": {
+      "sha256": "b45187fcddecebcacc2ecc7b26bf1e1bcf14e35bd7d6c4ecb1366b39df8943cd",
+      "size": 6775
+    },
+    "edgelora/include/llama.h": {
+      "sha256": "2051d99b8c0bb7c33e4d743b51c9a169c15a58e8acdefc1fca06a4070be32930",
+      "size": 67091
+    },
+    "edgelora/src/llama-lora-output-map.h": {
+      "sha256": "23f014cf2c34925a2eae6a9bac6fe9c8f30a28168ef762a06e6010eb334242a4",
+      "size": 1116
+    },
+    "edgelora/src/llama.cpp": {
+      "sha256": "514dc08d46b44a5bdf863bfb62bc11298d1e8956454cc67f984d3808225272de",
+      "size": 928628
+    },
+    "edgelora/tests/CMakeLists.txt": {
+      "sha256": "67cd42311c5533447cd59b0402ce1bc72243d7feddf4ff36355e19dd37e9de96",
+      "size": 7333
+    },
+    "edgelora/tests/test-router-classifier.cpp": {
+      "sha256": "fbfddb7fe9e44698ce320d159ecb33b594c432e13b24cdd1c5b96350401f513a",
+      "size": 5781
+    }
+  }
+}

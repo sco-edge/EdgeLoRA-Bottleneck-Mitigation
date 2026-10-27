@@ -1,0 +1,3712 @@
+diff --git a/edgelora/Makefile b/edgelora/Makefile
+index 6053bc17b60db1c476f390a579ba906bef20869d..0b9afaacac1422def0ea1590b51cb78108d48925 100644
+--- a/edgelora/Makefile
++++ b/edgelora/Makefile
+@@ -925,6 +925,7 @@ OBJ_LLAMA = \
+ 
+ OBJ_COMMON = \
+ 	common/common.o \
++    common/router-classifier.o \
+ 	common/console.o \
+ 	common/ngram-cache.o \
+ 	common/sampling.o \
+diff --git a/edgelora/common/CMakeLists.txt b/edgelora/common/CMakeLists.txt
+index 2c72793b89dbe2f65cd34724cc7ceb608b28c510..11f191a6851bad79f9ee66846cebcc8e937548b2 100644
+--- a/edgelora/common/CMakeLists.txt
++++ b/edgelora/common/CMakeLists.txt
+@@ -54,6 +54,8 @@ add_library(${TARGET} STATIC
+     base64.hpp
+     common.h
+     common.cpp
++    router-classifier.h
++    router-classifier.cpp
+     sampling.h
+     sampling.cpp
+     console.h
+diff --git a/edgelora/common/common.cpp b/edgelora/common/common.cpp
+index a32aef738faf28772f6463acedfe7223ac90840e..4b6ec07d6138bd59fe30c5073e041beb8c65e989 100644
+--- a/edgelora/common/common.cpp
++++ b/edgelora/common/common.cpp
+@@ -3,6 +3,7 @@
+ #endif
+ 
+ #include "common.h"
++#include "router-classifier.h"
+ // Change JSON_ASSERT from assert() to GGML_ASSERT:
+ #define JSON_ASSERT GGML_ASSERT
+ #include "json.hpp"
+@@ -1837,6 +1838,37 @@ std::vector<llama_arg> gpt_params_parser_init(gpt_params & params, llama_example
+             params.adapter_cache_size = value;
+         }
+     ));
++    add_opt(llama_arg(
++        {"--router-classifier"}, "FNAME",
++        "EdgeLoRA Router classifier artifact",
++        [](gpt_params & params, const std::string & value) {
++            params.router_classifier = value;
++        }
++    ));
++    add_opt(llama_arg(
++        {"--router-lora-id"}, "ID",
++        "registered LoRA adapter ID used by the Router",
++        [](gpt_params & params, int value) {
++            params.router_lora_id = value;
++        }
++    ));
++    add_opt(llama_arg(
++        {"--router-top-k"}, "N",
++        "number of score-ranked Router labels eligible for cache-aware selection (default: 1)",
++        [](gpt_params & params, int value) {
++            params.router_top_k = value;
++        }
++    ));
++    add_opt(llama_arg(
++        {"--router-label-map"}, "ID0,ID1,...",
++        "Router label to task adapter ID mapping",
++        [](gpt_params & params, const std::string & value) {
++            params.router_label_map.clear();
++            for (const std::string & item : string_split<std::string>(value, ',')) {
++                params.router_label_map.push_back(std::stoi(item));
++            }
++        }
++    ));
+     add_opt(llama_arg(
+         {"--control-vector"}, "FNAME",
+         "add a control vector\nnote: this argument can be repeated to add multiple control vectors",
+@@ -2676,6 +2708,15 @@ std::string fs_get_cache_file(const std::string & filename) {
+ //
+ struct llama_init_result llama_init_from_gpt_params(gpt_params & params) {
+     llama_init_result iparams;
++
++    if (!params.lora_adapters.empty() && !params.repeat_lora_adapters.empty()) {
++        fprintf(stderr,
++                "%s: error: --lora/--lora-scaled cannot be combined with --lora-repeated; "
++                "the two registration modes would make lazy adapter IDs ambiguous\n",
++                __func__);
++        return iparams;
++    }
++
+     auto mparams = llama_model_params_from_gpt_params(params);
+ 
+     llama_model * model = nullptr;
+@@ -2726,21 +2767,37 @@ struct llama_init_result llama_init_from_gpt_params(gpt_params & params) {
+         }
+     }
+ 
+-    // load and optionally apply lora adapters
+-    for (auto & la : params.lora_adapters) {
+-        llama_lora_adapter_container loaded_la;
+-        loaded_la.path = la.path;
+-        loaded_la.scale = la.scale;
+-        loaded_la.adapter = llama_lora_adapter_init(model, la.path.c_str());
+-        if (loaded_la.adapter == nullptr) {
+-            fprintf(stderr, "%s: error: failed to apply lora adapter '%s'\n", __func__, la.path.c_str());
+-            llama_free(lctx);
+-            llama_free_model(model);
+-            return iparams;
++    const bool register_lora_adapters_lazily = params.batch_lora && params.lora_init_without_apply;
++
++    // In batched deferred-apply mode, each --lora path is a distinct lazy
++    // adapter and its CLI position is its adapter ID. The context owns these
++    // containers after llama_lazy_lora_adapters_register() below.
++    if (register_lora_adapters_lazily) {
++        for (const auto & la : params.lora_adapters) {
++            auto * lazy_la = new llama_lazy_lora_adapter_container();
++            lazy_la->path = la.path;
++            lazy_la->adapter = nullptr;
++            lazy_la->loaded = false;
++            lazy_la->ref_count = 0;
++            iparams.lazy_lora_adapters.emplace_back(lazy_la);
++        }
++    } else {
++        // Preserve the regular eager-load path for all other modes.
++        for (auto & la : params.lora_adapters) {
++            llama_lora_adapter_container loaded_la;
++            loaded_la.path = la.path;
++            loaded_la.scale = la.scale;
++            loaded_la.adapter = llama_lora_adapter_init(model, la.path.c_str());
++            if (loaded_la.adapter == nullptr) {
++                fprintf(stderr, "%s: error: failed to apply lora adapter '%s'\n", __func__, la.path.c_str());
++                llama_free(lctx);
++                llama_free_model(model);
++                return iparams;
++            }
++            iparams.lora_adapters.push_back(loaded_la); // copy to list of loaded adapters
+         }
+-        iparams.lora_adapters.push_back(loaded_la); // copy to list of loaded adapters
+     }
+-    int num_lora = 0;
++
+     for (auto & la : params.repeat_lora_adapters) {
+         fprintf(stdout, "repeating LoRA adapter %s %d times\n", la.path.c_str(), la.repeat);
+         for (int i = 0; i < la.repeat; i++) {
+@@ -2751,16 +2808,32 @@ struct llama_init_result llama_init_from_gpt_params(gpt_params & params) {
+             lazy_la->ref_count = 0;
+             iparams.lazy_lora_adapters.emplace_back(lazy_la);
+         }
+-        num_lora += la.repeat;
+     }
+-    llama_lazy_lora_adapters_register(lctx, iparams.lazy_lora_adapters);
++    if (!llama_lazy_lora_adapters_register(lctx, iparams.lazy_lora_adapters)) {
++        // Registered containers are owned and freed by lctx. The registration
++        // helper already deleted the unregistered tail.
++        iparams.lazy_lora_adapters.clear();
++        llama_free(lctx);
++        llama_free_model(model);
++        return iparams;
++    }
++
++    if (params.router_lora_id >= 0 &&
++        llama_lora_adapter_load_resident(lctx, params.router_lora_id) != 0) {
++        fprintf(stderr, "%s: error: failed to load Router adapter ID %d as resident\n",
++                __func__, params.router_lora_id);
++        iparams.lazy_lora_adapters.clear();
++        llama_free(lctx);
++        llama_free_model(model);
++        return iparams;
++    }
++
+     if (params.adapter_cache_size > 0) {
+-        std::vector<int> adapter_ids;
+-        for (int i = 0; i < num_lora; i++) {
+-            adapter_ids.push_back(i);
+-        }
++        std::vector<int32_t> adapter_ids = router_task_adapter_ids(
++                iparams.lazy_lora_adapters.size(), params.router_lora_id);
+         std::random_shuffle(adapter_ids.begin(), adapter_ids.end());
+-        for (int i = 0; i < params.adapter_cache_size; i++) {
++        const size_t preload_count = router_preload_count(params.adapter_cache_size, adapter_ids.size());
++        for (size_t i = 0; i < preload_count; i++) {
+             fprintf(stdout, "caching LoRA adapter %d\n", adapter_ids[i]);
+             llama_lazy_load_lora_adapter(lctx, adapter_ids[i]);
+             llama_lora_adapter_release(lctx, adapter_ids[i]);
+@@ -2823,11 +2896,21 @@ void llama_lora_adapters_apply(struct llama_context * ctx, std::vector<llama_lor
+     }
+ }
+ 
+-void llama_lazy_lora_adapters_register(struct llama_context* ctx, std::vector<llama_lazy_lora_adapter_container*>& lazy_lora_adapters) {
+-    for (auto& lla : lazy_lora_adapters) {
++bool llama_lazy_lora_adapters_register(struct llama_context* ctx, std::vector<llama_lazy_lora_adapter_container*>& lazy_lora_adapters) {
++    for (size_t i = 0; i < lazy_lora_adapters.size(); ++i) {
++        auto * lla = lazy_lora_adapters[i];
+         fprintf(stdout, "registering LoRA adapter %s\n", lla->path.c_str());
+-        llama_lazy_lora_adapter_register(ctx, lla);
++        if (llama_lazy_lora_adapter_register(ctx, lla) != 0) {
++            fprintf(stderr, "%s: error: failed to register lazy LoRA adapter '%s'\n",
++                    __func__, lla->path.c_str());
++            for (size_t j = i; j < lazy_lora_adapters.size(); ++j) {
++                delete lazy_lora_adapters[j];
++            }
++            lazy_lora_adapters.resize(i);
++            return false;
++        }
+     }
++    return true;
+ }
+ 
+ struct llama_model_params llama_model_params_from_gpt_params(const gpt_params & params) {
+diff --git a/edgelora/common/common.h b/edgelora/common/common.h
+index d48f0bdac6e71d4b9023420ea23b678e83b47eb5..b24d9defafee3fdd51b9eba3b3772371910a78d0 100644
+--- a/edgelora/common/common.h
++++ b/edgelora/common/common.h
+@@ -176,6 +176,10 @@ struct gpt_params {
+                                // times
+     int32_t adapter_cache_size = 10;  // number of active lora adapters
+     bool batch_lora = false;          // apply lora to the batch
++    std::string router_classifier;
++    int32_t router_lora_id = -1;
++    int32_t router_top_k = 1;
++    std::vector<int32_t> router_label_map;
+ 
+     std::vector<llama_control_vector_load_info> control_vectors; // control vector with user defined scale
+ 
+@@ -462,7 +466,7 @@ struct llama_model * llama_load_model_from_hf(const char * repo, const char * fi
+ // clear LoRA adapters from context, then apply new list of adapters
+ void llama_lora_adapters_apply(struct llama_context * ctx, std::vector<llama_lora_adapter_container> & lora_adapters);
+ 
+-void llama_lazy_lora_adapters_register(struct llama_context* ctx, std::vector<llama_lazy_lora_adapter_container*>& lazy_lora_adapters);
++bool llama_lazy_lora_adapters_register(struct llama_context* ctx, std::vector<llama_lazy_lora_adapter_container*>& lazy_lora_adapters);
+ 
+ // Batch utils
+ 
+diff --git a/edgelora/common/router-classifier.cpp b/edgelora/common/router-classifier.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..8418a54ebd986b91ffb7eb39808b7b474f9b31c7
+--- /dev/null
++++ b/edgelora/common/router-classifier.cpp
+@@ -0,0 +1,174 @@
++#include "router-classifier.h"
++
++#include <algorithm>
++#include <cmath>
++#include <cstring>
++#include <fstream>
++#include <limits>
++#include <numeric>
++
++namespace {
++constexpr char ROUTER_MAGIC[8] = {'E', 'L', 'R', 'T', 'R', 'S', 'C', 'R'};
++constexpr uint32_t ROUTER_VERSION = 1;
++constexpr uint32_t ROUTER_DTYPE_F32 = 1;
++// Keep the original two-label fixture, and support the frozen six-task Router.
++constexpr uint32_t ROUTER_HIDDEN_SIZE = 3072;
++constexpr size_t ROUTER_HEADER_SIZE = 8 + 4 * sizeof(uint32_t);
++
++bool read_u32_le(std::istream & input, uint32_t & value) {
++    unsigned char bytes[4];
++    if (!input.read(reinterpret_cast<char *>(bytes), sizeof(bytes))) {
++        return false;
++    }
++    value = uint32_t(bytes[0]) | (uint32_t(bytes[1]) << 8) |
++            (uint32_t(bytes[2]) << 16) | (uint32_t(bytes[3]) << 24);
++    return true;
++}
++}
++
++bool router_classifier_load(const std::string & path, router_classifier & classifier, std::string & error) {
++    classifier = {};
++    std::ifstream input(path, std::ios::binary | std::ios::ate);
++    if (!input) {
++        error = "cannot open classifier: " + path;
++        return false;
++    }
++    const std::streamoff file_size = input.tellg();
++    input.seekg(0);
++    char magic[sizeof(ROUTER_MAGIC)];
++    uint32_t version, dtype, num_labels, hidden_size;
++    if (!input.read(magic, sizeof(magic)) || !read_u32_le(input, version) ||
++        !read_u32_le(input, dtype) || !read_u32_le(input, num_labels) ||
++        !read_u32_le(input, hidden_size)) {
++        error = "truncated classifier header";
++        return false;
++    }
++    if (std::memcmp(magic, ROUTER_MAGIC, sizeof(magic)) != 0) {
++        error = "invalid classifier magic";
++        return false;
++    }
++    if (version != ROUTER_VERSION) {
++        error = "unsupported classifier version";
++        return false;
++    }
++    if (dtype != ROUTER_DTYPE_F32) {
++        error = "unsupported classifier dtype";
++        return false;
++    }
++    if ((num_labels != 2 && num_labels != 6) || hidden_size != ROUTER_HIDDEN_SIZE ||
++        size_t(num_labels) > std::numeric_limits<size_t>::max() / size_t(hidden_size)) {
++        error = "invalid classifier dimensions";
++        return false;
++    }
++    const size_t count = size_t(num_labels) * size_t(hidden_size);
++    const size_t expected_size = ROUTER_HEADER_SIZE + count * sizeof(float);
++    if (file_size < 0 || size_t(file_size) != expected_size) {
++        error = "classifier file size does not match dimensions";
++        return false;
++    }
++    classifier.num_labels = num_labels;
++    classifier.hidden_size = hidden_size;
++    classifier.weights.resize(count);
++    for (size_t i = 0; i < count; ++i) {
++        uint32_t bits;
++        if (!read_u32_le(input, bits)) {
++            error = "truncated classifier weights";
++            classifier = {};
++            return false;
++        }
++        float value;
++        std::memcpy(&value, &bits, sizeof(value));
++        if (!std::isfinite(value)) {
++            error = "classifier contains non-finite weight";
++            classifier = {};
++            return false;
++        }
++        classifier.weights[i] = value;
++    }
++    return true;
++}
++
++std::vector<float> router_classifier_score(const router_classifier & classifier, const float * hidden, size_t hidden_size) {
++    if (hidden == nullptr || hidden_size != classifier.hidden_size) {
++        return {};
++    }
++    std::vector<float> scores(classifier.num_labels, 0.0f);
++    for (size_t label = 0; label < classifier.num_labels; ++label) {
++        const float * row = classifier.weights.data() + label * classifier.hidden_size;
++        float score = 0.0f;
++        for (size_t i = 0; i < classifier.hidden_size; ++i) {
++            score += row[i] * hidden[i];
++        }
++        if (!std::isfinite(score)) { return {}; }
++        scores[label] = score;
++    }
++    return scores;
++}
++
++std::vector<int32_t> router_rank_labels(const std::vector<float> & scores) {
++    std::vector<int32_t> labels(scores.size());
++    std::iota(labels.begin(), labels.end(), 0);
++    std::stable_sort(labels.begin(), labels.end(), [&scores](int32_t a, int32_t b) {
++        return scores[a] > scores[b];
++    });
++    return labels;
++}
++
++bool router_top_k_valid(int32_t top_k, size_t num_labels) {
++    return top_k >= 1 && size_t(top_k) <= num_labels;
++}
++
++std::vector<int32_t> router_top_candidates(
++        const std::vector<int32_t> & ranked_labels,
++        int32_t top_k) {
++    if (!router_top_k_valid(top_k, ranked_labels.size())) {
++        return {};
++    }
++    return {ranked_labels.begin(), ranked_labels.begin() + top_k};
++}
++
++int32_t router_select_adapter(
++        const std::vector<int32_t> & ranked_labels,
++        const std::vector<int32_t> & label_to_adapter,
++        int32_t router_adapter_id,
++        const std::vector<bool> & resident,
++        bool & cache_hit) {
++    cache_hit = false;
++    int32_t top1 = -1;
++    for (int32_t label : ranked_labels) {
++        if (label < 0 || size_t(label) >= label_to_adapter.size()) {
++            return -1;
++        }
++        const int32_t adapter = label_to_adapter[label];
++        if (adapter < 0 || adapter == router_adapter_id) {
++            continue;
++        }
++        if (top1 < 0) {
++            top1 = adapter;
++        }
++        if (size_t(adapter) < resident.size() && resident[adapter]) {
++            cache_hit = true;
++            return adapter;
++        }
++    }
++    return top1;
++}
++
++size_t router_preload_count(int32_t adapter_cache_size, size_t num_lora) {
++    return adapter_cache_size > 0 ? std::min<size_t>(size_t(adapter_cache_size), num_lora) : 0;
++}
++
++bool router_should_route(bool router_enabled, bool explicit_adapter_id, bool embedding_request) {
++    return router_enabled && !explicit_adapter_id && !embedding_request;
++}
++
++std::vector<int32_t> router_task_adapter_ids(size_t num_lora, int32_t router_adapter_id) {
++    std::vector<int32_t> result;
++    result.reserve(num_lora);
++    for (size_t i = 0; i < num_lora; ++i) {
++        if (static_cast<int32_t>(i) != router_adapter_id) {
++            result.push_back(static_cast<int32_t>(i));
++        }
++    }
++    return result;
++}
+diff --git a/edgelora/common/router-classifier.h b/edgelora/common/router-classifier.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..eba6f5e214b7f97325a7aeb9ee410196843d7711
+--- /dev/null
++++ b/edgelora/common/router-classifier.h
+@@ -0,0 +1,26 @@
++#pragma once
++
++#include <cstdint>
++#include <string>
++#include <vector>
++
++struct router_classifier {
++    uint32_t num_labels = 0;
++    uint32_t hidden_size = 0;
++    std::vector<float> weights;
++};
++
++bool router_classifier_load(const std::string & path, router_classifier & classifier, std::string & error);
++std::vector<float> router_classifier_score(const router_classifier & classifier, const float * hidden, size_t hidden_size);
++std::vector<int32_t> router_rank_labels(const std::vector<float> & scores);
++bool router_top_k_valid(int32_t top_k, size_t num_labels);
++std::vector<int32_t> router_top_candidates(const std::vector<int32_t> & ranked_labels, int32_t top_k);
++int32_t router_select_adapter(
++        const std::vector<int32_t> & ranked_labels,
++        const std::vector<int32_t> & label_to_adapter,
++        int32_t router_adapter_id,
++        const std::vector<bool> & resident,
++        bool & cache_hit);
++size_t router_preload_count(int32_t adapter_cache_size, size_t num_lora);
++bool router_should_route(bool router_enabled, bool explicit_adapter_id, bool embedding_request);
++std::vector<int32_t> router_task_adapter_ids(size_t num_lora, int32_t router_adapter_id);
+diff --git a/edgelora/convert_lora_to_gguf.py b/edgelora/convert_lora_to_gguf.py
+index ddd347a2abd2ad72e73bde4fda2c4655dc3e861c..4eb13e5b8c01d3797ef8b6f2bb3c4d65da79599a 100755
+--- a/edgelora/convert_lora_to_gguf.py
++++ b/edgelora/convert_lora_to_gguf.py
+@@ -9,6 +9,7 @@ import argparse
+ import os
+ import sys
+ import json
++import struct
+ from math import prod
+ from pathlib import Path
+ from typing import TYPE_CHECKING, Any, Callable, Iterable, Iterator, Sequence, SupportsIndex, cast
+@@ -27,6 +28,11 @@ from convert_hf_to_gguf import LazyTorchTensor, Model
+ 
+ logger = logging.getLogger("lora-to-gguf")
+ 
++ROUTER_SCORE_KEY = "base_model.model.score.weight"
++ROUTER_MAGIC = b"ELRTRSCR"
++ROUTER_VERSION = 1
++ROUTER_DTYPE_F32 = 1
++
+ 
+ @dataclass
+ class PartialLoraTensor:
+@@ -259,6 +265,10 @@ def parse_args() -> argparse.Namespace:
+         "--base", type=Path, required=True,
+         help="directory containing base model file",
+     )
++    parser.add_argument(
++        "--router-classifier-out", type=Path,
++        help="export base_model.model.score.weight as a separate EdgeLoRA Router classifier",
++    )
+     parser.add_argument(
+         "lora_path", type=Path,
+         help="directory containing LoRA adapter file",
+@@ -267,6 +277,26 @@ def parse_args() -> argparse.Namespace:
+     return parser.parse_args()
+ 
+ 
++def export_router_classifier(tensor: Tensor, output: Path, dry_run: bool) -> None:
++    if tensor.ndim != 2:
++        raise ValueError(f"{ROUTER_SCORE_KEY} must be rank 2, got {tuple(tensor.shape)}")
++    num_labels, hidden_size = tensor.shape
++    if num_labels not in (2, 6) or hidden_size != 3072:
++        raise ValueError(
++            f"{ROUTER_SCORE_KEY} must have shape (2 or 6, 3072), got {tuple(tensor.shape)}")
++    weights = tensor.detach().to(dtype=torch.float32, device="cpu").contiguous()
++    if not torch.isfinite(weights).all():
++        raise ValueError(f"{ROUTER_SCORE_KEY} contains non-finite values")
++    logger.info("Router classifier: %s labels=%d hidden_size=%d dtype=f32", output, num_labels, hidden_size)
++    if dry_run:
++        return
++    output.parent.mkdir(parents=True, exist_ok=True)
++    with output.open("wb") as classifier_file:
++        classifier_file.write(ROUTER_MAGIC)
++        classifier_file.write(struct.pack("<IIII", ROUTER_VERSION, ROUTER_DTYPE_F32, num_labels, hidden_size))
++        classifier_file.write(weights.numpy().astype("<f4", copy=False).tobytes(order="C"))
++
++
+ if __name__ == '__main__':
+     args = parse_args()
+     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
+@@ -301,6 +331,11 @@ if __name__ == '__main__':
+         input_model = os.path.join(dir_lora, "adapter_model.bin")
+         lora_model = torch.load(input_model, map_location="cpu", weights_only=True)
+ 
++    if args.router_classifier_out is not None:
++        if ROUTER_SCORE_KEY not in lora_model:
++            raise ValueError(f"Router mode requires exactly '{ROUTER_SCORE_KEY}'")
++        export_router_classifier(lora_model[ROUTER_SCORE_KEY], args.router_classifier_out, args.dry_run)
++
+     # load base model
+     logger.info(f"Loading base model: {dir_base_model.name}")
+     hparams = Model.load_hparams(dir_base_model)
+@@ -335,6 +370,8 @@ if __name__ == '__main__':
+                 tensor_map: dict[str, PartialLoraTensor] = {}
+ 
+                 for name, tensor in lora_model.items():
++                    if name == ROUTER_SCORE_KEY and args.router_classifier_out is not None:
++                        continue
+                     if self.lazy:
+                         tensor = LazyTorchTensor.from_eager(tensor)
+                     base_name = get_base_tensor_name(name)
+diff --git a/edgelora/examples/server/server.cpp b/edgelora/examples/server/server.cpp
+index 6fada7d8ff713cab25b2f1ad06dadba7a567819a..4e921cc8bdbb43e69b3bb30e409bf8317a97ae77 100644
+--- a/edgelora/examples/server/server.cpp
++++ b/edgelora/examples/server/server.cpp
+@@ -1,6 +1,7 @@
+ #include "utils.hpp"
+ 
+ #include "common.h"
++#include "router-classifier.h"
+ #include "json-schema-to-grammar.h"
+ #include "llama.h"
+ 
+@@ -31,6 +32,7 @@
+ #include <chrono>
+ #include <condition_variable>
+ #include <cstddef>
++#include <functional>
+ #include <mutex>
+ #include <thread>
+ #include <signal.h>
+@@ -118,6 +120,10 @@ struct slot_params {
+ 
+     int32_t adapter_id = -1; // lora adapter id (-1 for not using any adapter)
+ 
++    std::string load_policy = "sync";
++    double load_wait_timeout_ms = 60000.0;
++    bool load_fail_inject = false;
++
+     std::vector<std::string> antiprompt;
+ 
+     json input_prefix;
+@@ -132,6 +138,17 @@ struct server_slot {
+     size_t index = 0;
+ 
+     struct slot_params params;
++    // True only while this slot owns one cache reference for params.adapter_id.
++    bool adapter_acquired = false;
++    int32_t acquired_adapter_id = -1;
++    int32_t response_adapter_id = -1;
++    uint64_t async_job_id = 0;
++    int64_t t_async_wait_start = 0;
++    int64_t t_async_pinned_start = 0;
++    bool routing_prompt = false;
++    bool routing_explicit = false;
++    std::string router_text;
++    int64_t t_start_router = 0;
+ 
+     slot_state state = SLOT_STATE_IDLE;
+ 
+@@ -192,6 +209,7 @@ struct server_slot {
+ 
+     int64_t t_start_process_prompt;
+     int64_t t_start_generation;
++    int64_t t_start_first_token;
+ 
+     double t_prompt_processing; // ms
+     double t_token_generation; // ms
+@@ -200,6 +218,8 @@ struct server_slot {
+     std::function<void(int)> callback_on_release;
+ 
+     void reset() {
++        GGML_ASSERT(!adapter_acquired && "slot reset with an acquired LoRA adapter");
++        GGML_ASSERT(acquired_adapter_id == -1 && "slot reset with a stale LoRA adapter ID");
+         n_prompt_tokens    = 0;
+         generated_text     = "";
+         truncated          = false;
+@@ -213,6 +233,16 @@ struct server_slot {
+         cmpl_type          = SERVER_TASK_CMPL_TYPE_NORMAL;
+         ga_i               = 0;
+         n_past_se          = 0;
++        async_job_id = 0;
++        t_async_wait_start = 0;
++        t_async_pinned_start = 0;
++        routing_prompt     = false;
++        routing_explicit   = false;
++        router_text.clear();
++        response_adapter_id = -1;
++        t_start_router     = 0;
++        t_start_first_token = 0;
++        t_first_token       = 0;
+ 
+         generated_token_probs.clear();
+     }
+@@ -541,6 +571,189 @@ struct server_queue {
+     }
+ };
+ 
++// backend-async: a single loader thread materializes reserved pool objects
++// (GGUF read + backend allocation + H2D copy) while the main thread keeps
++// decoding. The main thread owns every cache/container/slot mutation: it
++// reserves before submit() and publishes after the job is taken back with
++// take_done(). The worker only ever touches the reserved object.
++enum class async_job_phase {
++    QUEUED,
++    RUNNING,
++    DONE,
++};
++
++struct adapter_async_job {
++    uint64_t job_id = 0;
++    int32_t adapter_id = -1;
++    std::string path;
++    llama_lora_reservation reservation;
++    async_job_phase phase = async_job_phase::QUEUED;
++    bool ok = false;
++    bool fail_inject = false;
++    std::string error;
++    int64_t t_submit_us = 0;
++    int64_t t_start_us = 0;
++    int64_t t_end_us = 0;
++    // main-thread only: tasks coalesced onto this job (diagnostics)
++    std::vector<int> waiting_tasks;
++};
++
++struct adapter_async_loader {
++    std::mutex mutex;
++    std::condition_variable cv_worker;
++    std::condition_variable cv_done;
++    std::deque<std::shared_ptr<adapter_async_job>> queue;   // QUEUED, FIFO
++    std::vector<std::shared_ptr<adapter_async_job>> done;   // DONE, awaiting publish
++    std::shared_ptr<adapter_async_job> running;             // RUNNING (at most one)
++    std::thread worker;
++    bool started = false;
++    bool stopping = false;
++    uint64_t next_job_id = 1;
++    llama_model * model = nullptr;
++    std::function<void()> wake_server;
++
++    // main-thread only: adapter_id -> job that is QUEUED/RUNNING/DONE-unpublished
++    std::unordered_map<int32_t, std::shared_ptr<adapter_async_job>> inflight;
++
++    ~adapter_async_loader() {
++        shutdown();
++    }
++
++    void start(llama_model * model_) {
++        std::lock_guard<std::mutex> lock(mutex);
++        if (started) {
++            return;
++        }
++        model = model_;
++        started = true;
++        stopping = false;
++        worker = std::thread([this]() { worker_loop(); });
++    }
++
++    // Stop accepting work, let the in-flight load finish (a CUDA copy is
++    // never interrupted), and join. Jobs still QUEUED are failed without
++    // starting. After this returns every job is in `done` for the caller to
++    // publish(false) so their reservations go back to the pool.
++    void shutdown() {
++        {
++            std::lock_guard<std::mutex> lock(mutex);
++            if (!started) {
++                return;
++            }
++            stopping = true;
++        }
++        cv_worker.notify_all();
++        if (worker.joinable()) {
++            worker.join();
++        }
++        std::lock_guard<std::mutex> lock(mutex);
++        started = false;
++        for (auto & job : queue) {
++            job->phase = async_job_phase::DONE;
++            job->ok = false;
++            job->error = "server shutting down before the load started";
++            job->t_end_us = ggml_time_us();
++            done.push_back(job);
++        }
++        queue.clear();
++    }
++
++    std::shared_ptr<adapter_async_job> find(int32_t adapter_id) const {
++        auto it = inflight.find(adapter_id);
++        return it == inflight.end() ? nullptr : it->second;
++    }
++
++    std::shared_ptr<adapter_async_job> submit(int32_t adapter_id, const std::string & path,
++                                              llama_lora_reservation && reservation, bool fail_inject) {
++        auto job = std::make_shared<adapter_async_job>();
++        job->adapter_id = adapter_id;
++        job->path = path;
++        job->reservation = std::move(reservation);
++        job->fail_inject = fail_inject;
++        job->t_submit_us = ggml_time_us();
++        {
++            std::lock_guard<std::mutex> lock(mutex);
++            job->job_id = next_job_id++;
++            if (stopping || !started) {
++                job->phase = async_job_phase::DONE;
++                job->ok = false;
++                job->error = "loader is not running";
++                job->t_end_us = job->t_submit_us;
++                done.push_back(job);
++            } else {
++                queue.push_back(job);
++            }
++        }
++        inflight[adapter_id] = job;
++        cv_worker.notify_one();
++        return job;
++    }
++
++    std::vector<std::shared_ptr<adapter_async_job>> take_done() {
++        std::lock_guard<std::mutex> lock(mutex);
++        std::vector<std::shared_ptr<adapter_async_job>> out;
++        out.swap(done);
++        return out;
++    }
++
++    bool has_pending() {
++        std::lock_guard<std::mutex> lock(mutex);
++        return !queue.empty() || running != nullptr || !done.empty();
++    }
++
++    // main thread: block briefly until a job completes (avoids a hot spin
++    // when the only pending work is a load).
++    bool wait_done(std::chrono::milliseconds timeout) {
++        std::unique_lock<std::mutex> lock(mutex);
++        return cv_done.wait_for(lock, timeout, [&]{ return !done.empty() || stopping; });
++    }
++
++    void worker_loop() {
++        while (true) {
++            std::shared_ptr<adapter_async_job> job;
++            {
++                std::unique_lock<std::mutex> lock(mutex);
++                cv_worker.wait(lock, [&]{ return stopping || !queue.empty(); });
++                if (queue.empty()) {
++                    // stopping with nothing queued
++                    return;
++                }
++                if (stopping) {
++                    // queued jobs are failed by shutdown() without starting
++                    return;
++                }
++                job = queue.front();
++                queue.pop_front();
++                job->phase = async_job_phase::RUNNING;
++                job->t_start_us = ggml_time_us();
++                running = job;
++            }
++
++            std::string error;
++            const int rc = llama_lora_reservation_load(model, job->path.c_str(), job->reservation, error);
++            bool ok = rc == 0;
++            if (ok && job->fail_inject) {
++                ok = false;
++                error = "injected load failure (adapter_load_fail_inject)";
++            }
++
++            {
++                std::lock_guard<std::mutex> lock(mutex);
++                job->ok = ok;
++                job->error = error;
++                job->t_end_us = ggml_time_us();
++                job->phase = async_job_phase::DONE;
++                running.reset();
++                done.push_back(job);
++            }
++            cv_done.notify_all();
++            if (wake_server) {
++                wake_server();
++            }
++        }
++    }
++};
++
+ struct server_response {
+     // for keeping track of all tasks waiting for the result
+     std::unordered_set<int> waiting_task_ids;
+@@ -616,48 +829,19 @@ struct server_response {
+ };
+ 
+ 
+-int get_best_adapter_index_mock(int n_vocab, int n_adapter) {
+-    // Seed the random number generator (if not already seeded)
+-    srand((unsigned)time(NULL));
+-
+-    // Initialize ggml context with default parameters
+-    size_t compute_size = 1024ll*1024ll*1024ll;
+-    uint8_t * compute_addr = new uint8_t[compute_size];
+-    struct ggml_init_params params = { compute_size, compute_addr, false };
+-    struct ggml_context *ctx = ggml_init(params);
+-    if (!ctx) {
+-        fprintf(stderr, "Failed to initialize ggml context\n");
+-        return -1;
+-    }
+-
+-    // Create a 1D tensor for logits with shape [n_vocab]
+-    struct ggml_tensor *logits = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, n_vocab);
+-
+-    // Create a 2D tensor for classifier with shape [n_vocab, n_adapter]
+-    struct ggml_tensor *classifier = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, n_vocab, n_adapter);
+-
+-    struct ggml_tensor *adapter_scores = ggml_mul_mat(ctx, logits, classifier);
+-    struct ggml_tensor* argmax_tensor = ggml_argmax(ctx, adapter_scores);
+-
+-    // Extract the integer index from the returned scalar tensor.
+-    int best_index = ggml_get_i32_1d(argmax_tensor, 0);
+-
+-    // Clean up the ggml context and its associated tensors
+-    ggml_free(ctx);
+-    delete[] compute_addr;
+-
+-    return best_index;
+-}
+-
+ struct server_context {
+     llama_model * model = nullptr;
+     llama_context * ctx = nullptr;
+     std::vector<llama_lora_adapter_container> lora_adapters;
+     std::vector<llama_lazy_lora_adapter_container*> lazy_lora_adapters;
++    router_classifier router;
++    bool router_enabled = false;
+ 
+     gpt_params params;
+ 
+-    llama_batch batch;
++    // Keep partial-initialization cleanup safe when server startup fails before
++    // load_model() allocates the shared batch (for example, bind failure).
++    llama_batch batch = {};
+ 
+     bool clean_kv_cache = true;
+     bool add_bos_token  = true;
+@@ -677,14 +861,45 @@ struct server_context {
+ 
+     server_queue    queue_tasks;
+     server_response queue_results;
++    adapter_async_loader async_loader;
++    std::atomic<bool> shutting_down{false};
+ 
+     server_metrics metrics;
++    bool cleared = false;
+ 
+     // Necessary similarity of prompt for slot selection
+     float slot_prompt_similarity = 0.0f;
+ 
+-    ~server_context() {
++    void clear() {
++        if (cleared) {
++            return;
++        }
++        cleared = true;
++
+         if (ctx) {
++            // join-before-destroy: the loader thread may still be copying into a
++            // reserved pool object, and every reservation must be back in the
++            // pool before the LRU (and then the model) is freed.
++            const int64_t t_join_begin = ggml_time_us();
++            async_loader.shutdown();
++            const int64_t t_join_end = ggml_time_us();
++            size_t n_returned = 0;
++            for (auto & job : async_loader.take_done()) {
++                llama_lazy_lora_adapter_publish(ctx, job->reservation, false);
++                async_loader.inflight.erase(job->adapter_id);
++                n_returned++;
++            }
++            async_loader.inflight.clear();
++            LOG_INFO("async loader joined", {
++                {"async_event", "loader_joined"},
++                {"join_wait_us", t_join_end - t_join_begin},
++                {"reservations_returned", n_returned},
++                {"mono_us", ggml_time_us()},
++            });
++
++            for (server_slot & slot : slots) {
++                release_slot(slot);
++            }
+             llama_free(ctx);
+             ctx = nullptr;
+         }
+@@ -704,6 +919,10 @@ struct server_context {
+         llama_batch_free(batch);
+     }
+ 
++    ~server_context() {
++        clear();
++    }
++
+     bool load_model(const gpt_params & params_) {
+         params = params_;
+ 
+@@ -722,6 +941,61 @@ struct server_context {
+             return false;
+         }
+ 
++        const bool any_router_option = params.router_lora_id >= 0 ||
++                !params.router_classifier.empty() || !params.router_label_map.empty();
++        if (any_router_option) {
++            if (params.router_lora_id < 0 || params.router_classifier.empty() || params.router_label_map.empty()) {
++                LOG_ERROR("incomplete Router configuration", {});
++                return false;
++            }
++            std::string error;
++            if (!router_classifier_load(params.router_classifier, router, error)) {
++                LOG_ERROR("failed to load Router classifier", {{"error", error}});
++                return false;
++            }
++            if (!router_top_k_valid(params.router_top_k, router.num_labels)) {
++                LOG_ERROR("Router top-k is outside classifier label range", {
++                    {"router_top_k", params.router_top_k},
++                    {"num_labels", router.num_labels},
++                });
++                return false;
++            }
++            if (router.hidden_size != (uint32_t) llama_n_embd(model) ||
++                router.num_labels != params.router_label_map.size() ||
++                params.router_lora_id >= (int32_t) lazy_lora_adapters.size() ||
++                !llama_lora_adapter_is_resident(ctx, params.router_lora_id)) {
++                LOG_ERROR("Router dimensions, label map, or adapter ID are invalid", {
++                    {"classifier_hidden_size", router.hidden_size},
++                    {"model_hidden_size", llama_n_embd(model)},
++                    {"num_labels", router.num_labels},
++                    {"lazy_lora_adapter_count", lazy_lora_adapters.size()},
++                    {"regular_lora_adapter_count", lora_adapters.size()},
++                    {"router_lora_id", params.router_lora_id},
++                    {"router_label_map", params.router_label_map},
++                });
++                return false;
++            }
++            for (int32_t task_adapter_id : params.router_label_map) {
++                if (task_adapter_id < 0 || task_adapter_id >= (int32_t) lazy_lora_adapters.size() ||
++                    task_adapter_id == params.router_lora_id) {
++                    LOG_ERROR("Router label map contains invalid or Router adapter ID", {
++                        {"task_adapter_id", task_adapter_id},
++                    });
++                    return false;
++                }
++            }
++            router_enabled = true;
++            LOG_INFO("Router checkpoint/classifier loaded", {
++                {"classifier", params.router_classifier},
++                {"router_adapter_id", params.router_lora_id},
++                {"num_labels", router.num_labels},
++                {"router_top_k", params.router_top_k},
++                {"hidden_size", router.hidden_size},
++                {"residency", "dedicated"},
++                {"task_cache_capacity", params.adapter_cache_size},
++            });
++        }
++
+         n_ctx = llama_n_ctx(ctx);
+ 
+         add_bos_token = llama_add_bos_token(model);
+@@ -799,6 +1073,311 @@ struct server_context {
+         }
+ 
+         metrics.init();
++        async_loader.wake_server = [this]() {
++            server_task task;
++            task.type = SERVER_TASK_TYPE_NEXT_RESPONSE;
++            task.id_target = -1;
++            queue_tasks.post(task);
++        };
++        async_loader.start(model);
++
++    }
++
++    // main thread, safe point: move every finished asynchronous load into the
++    // LRU (READY) or back to the pool, before any batch for this iteration is
++    // assembled. Waiting slots pick the result up in the prompt loop.
++    void publish_async_loads() {
++        for (auto & job : async_loader.take_done()) {
++            const int64_t t_publish_begin = ggml_time_us();
++            auto current = async_loader.find(job->adapter_id);
++            const bool stale = !current || current->job_id != job->job_id;
++            const int rc = llama_lazy_lora_adapter_publish(ctx, job->reservation, job->ok && !stale);
++            if (!stale) {
++                async_loader.inflight.erase(job->adapter_id);
++            }
++            const int64_t t_publish_end = ggml_time_us();
++            LOG_INFO("async load publish", {
++                {"async_event", rc == 0 ? "published" : "returned"},
++                {"adapter_id", job->adapter_id}, {"job_id", job->job_id},
++                {"generation", job->reservation.generation},
++                {"ok", job->ok}, {"stale", stale}, {"error", job->error},
++                {"waiting_tasks", job->waiting_tasks},
++                {"queue_wait_us", job->t_start_us - job->t_submit_us},
++                {"load_us", job->t_end_us - job->t_start_us},
++                {"worker_start_us", job->t_start_us},
++                {"worker_end_us", job->t_end_us}, {"publish_begin_us", t_publish_begin},
++                {"publish_us", t_publish_end - t_publish_begin},
++                {"mono_us", t_publish_end},
++            });
++            async_result & result = async_results[job->adapter_id];
++            result.job_id = job->job_id;
++            result.ok     = rc == 0;
++            result.error  = stale ? std::string("superseded by a newer load job") : job->error;
++
++            if (rc != 0) {
++                continue;
++            }
++            // hand the reference to the waiting slots right away so that no
++            // other reserve() can evict the freshly published (ref_count 0)
++            // entry before its requesters acquire it
++            for (server_slot & slot : slots) {
++                if (slot.state != SLOT_STATE_PROCESSING_PROMPT || slot.adapter_acquired ||
++                    slot.async_job_id != job->job_id || slot.params.adapter_id != job->adapter_id) {
++                    continue;
++                }
++                const int64_t t_acquire_begin = ggml_time_us();
++                if (!acquire_slot_adapter(slot, job->adapter_id)) {
++                    send_error(slot, "Unable to acquire the published LoRA adapter", ERROR_TYPE_SERVER);
++                    release_slot(slot);
++                    continue;
++                }
++                const int64_t t_acquire_end = ggml_time_us();
++                LOG_INFO("async load acquire", {
++                    {"async_event", "acquired"}, {"id_task", slot.id_task}, {"id_slot", slot.id},
++                    {"adapter_id", job->adapter_id}, {"job_id", job->job_id},
++                    {"waited_us", t_acquire_end - slot.t_async_wait_start},
++                    {"acquire_us", t_acquire_end - t_acquire_begin}, {"mono_us", t_acquire_end},
++                });
++                slot.async_job_id = 0;
++                slot.t_async_wait_start = 0;
++                slot.t_async_pinned_start = 0;
++            }
++        }
++    }
++
++    struct async_result {
++        uint64_t job_id;
++        bool ok;
++        std::string error;
++    };
++    // main thread: last completed job per adapter, consumed by waiting slots
++    std::unordered_map<int32_t, async_result> async_results;
++
++    // Returns true when the slot may proceed to prompt processing with its
++    // adapter acquired; false when it must wait (still loading / all pinned)
++    // or has been failed and released.
++    bool ensure_slot_adapter_async(server_slot & slot, int32_t adapter_id) {
++        const int64_t now_us = ggml_time_us();
++
++        // 0. shutting down: waiting requests are failed so the loop drains;
++        //    the loader is joined in clear() before llama_free
++        if (shutting_down.load()) {
++            LOG_INFO("async load aborted by shutdown", {
++                {"async_event", "shutdown_abort"}, {"id_task", slot.id_task}, {"id_slot", slot.id},
++                {"adapter_id", adapter_id}, {"job_id", slot.async_job_id}, {"mono_us", now_us},
++            });
++            send_error(slot, "Server is shutting down", ERROR_TYPE_UNAVAILABLE);
++            release_slot(slot);
++            return false;
++        }
++
++        // 1. still in flight (queued, running, or done-but-unpublished)?
++        auto job = async_loader.find(adapter_id);
++        if (job) {
++            if (slot.async_job_id == 0) {
++                // coalesce: a second miss for the same adapter joins the job
++                slot.async_job_id = job->job_id;
++                slot.t_async_wait_start = now_us;
++                job->waiting_tasks.push_back(slot.id_task);
++                LOG_INFO("async load coalesced", {
++                    {"async_event", "coalesced"}, {"id_task", slot.id_task}, {"id_slot", slot.id},
++                    {"adapter_id", adapter_id}, {"job_id", job->job_id}, {"mono_us", now_us},
++                });
++            }
++            return false;
++        }
++
++        // 2. published and usable?
++        if (llama_lora_adapter_cached(ctx, adapter_id)) {
++            const int64_t t_acquire_begin = ggml_time_us();
++            if (!acquire_slot_adapter(slot, adapter_id)) {
++                send_error(slot, "Unable to acquire the published LoRA adapter", ERROR_TYPE_SERVER);
++                release_slot(slot);
++                return false;
++            }
++            const int64_t t_acquire_end = ggml_time_us();
++            LOG_INFO("async load acquire", {
++                {"async_event", "acquired"}, {"id_task", slot.id_task}, {"id_slot", slot.id},
++                {"adapter_id", adapter_id}, {"job_id", slot.async_job_id},
++                {"waited_us", slot.async_job_id ? t_acquire_end - slot.t_async_wait_start : 0},
++                {"acquire_us", t_acquire_end - t_acquire_begin}, {"mono_us", t_acquire_end},
++            });
++            slot.async_job_id = 0;
++            slot.t_async_wait_start = 0;
++            slot.t_async_pinned_start = 0;
++            return true;
++        }
++
++        // 3. the job this slot waited on finished without publishing?
++        if (slot.async_job_id != 0) {
++            auto res = async_results.find(adapter_id);
++            if (res != async_results.end() && res->second.job_id == slot.async_job_id && !res->second.ok) {
++                LOG_ERROR("async load failed", {
++                    {"async_event", "failed"}, {"id_task", slot.id_task}, {"id_slot", slot.id},
++                    {"adapter_id", adapter_id}, {"job_id", slot.async_job_id},
++                    {"error", res->second.error}, {"mono_us", now_us},
++                });
++                send_error(slot, "Adapter load failed: " + res->second.error, ERROR_TYPE_SERVER);
++                release_slot(slot);
++                return false;
++            }
++            // published then evicted before we acquired, or an unrelated
++            // result: fall through and reserve again
++            slot.async_job_id = 0;
++        }
++
++        // 4. reserve a pool object and hand it to the loader
++        llama_lora_reservation reservation;
++        int32_t evicted_id = -1;
++        std::string error;
++        const int64_t t_reserve_begin = ggml_time_us();
++        const int32_t rc = llama_lazy_lora_adapter_reserve(ctx, adapter_id, reservation, evicted_id, error);
++        const int64_t t_reserve_end = ggml_time_us();
++        if (rc == 1) {
++            // every entry pinned: keep decoding the other slots and retry
++            if (slot.t_async_pinned_start == 0) {
++                slot.t_async_pinned_start = now_us;
++                LOG_INFO("async load waiting for a free cache entry", {
++                    {"async_event", "wait_pinned"}, {"id_task", slot.id_task}, {"id_slot", slot.id},
++                    {"adapter_id", adapter_id}, {"mono_us", now_us},
++                });
++            } else if ((now_us - slot.t_async_pinned_start) / 1000.0 > slot.params.load_wait_timeout_ms) {
++                LOG_ERROR("async load timed out waiting for a free cache entry", {
++                    {"async_event", "wait_pinned_timeout"}, {"id_task", slot.id_task}, {"id_slot", slot.id},
++                    {"adapter_id", adapter_id}, {"waited_us", now_us - slot.t_async_pinned_start},
++                    {"mono_us", now_us},
++                });
++                send_error(slot, "Adapter cache exhausted: every entry is pinned by an active request", ERROR_TYPE_UNAVAILABLE);
++                release_slot(slot);
++            }
++            return false;
++        }
++        if (rc != 0) {
++            LOG_ERROR("async load reserve failed", {
++                {"async_event", "reserve_failed"}, {"id_task", slot.id_task}, {"id_slot", slot.id},
++                {"adapter_id", adapter_id}, {"error", error}, {"mono_us", now_us},
++            });
++            send_error(slot, "Unable to reserve a LoRA cache entry: " + error, ERROR_TYPE_SERVER);
++            release_slot(slot);
++            return false;
++        }
++
++        const uint64_t generation = reservation.generation;
++        auto new_job = async_loader.submit(adapter_id, lazy_lora_adapters[adapter_id]->path,
++                                           std::move(reservation), slot.params.load_fail_inject);
++        new_job->waiting_tasks.push_back(slot.id_task);
++        slot.async_job_id = new_job->job_id;
++        slot.t_async_wait_start = now_us;
++        slot.t_async_pinned_start = 0;
++        LOG_INFO("async load submitted", {
++            {"async_event", "submitted"}, {"id_task", slot.id_task}, {"id_slot", slot.id},
++            {"adapter_id", adapter_id}, {"job_id", new_job->job_id}, {"generation", generation},
++            {"evicted_id", evicted_id}, {"reserve_us", t_reserve_end - t_reserve_begin},
++            {"fail_inject", slot.params.load_fail_inject}, {"mono_us", t_reserve_end},
++        });
++        return false;
++    }
++
++    json adapter_cache_status() {
++        size_t n_published = 0, n_reserved = 0, capacity = 0;
++        llama_lora_cache_stats(ctx, &n_published, &n_reserved, &capacity);
++        json adapters = json::array();
++        for (size_t i = 0; i < lazy_lora_adapters.size(); ++i) {
++            int32_t state = 0; uint32_t ref_count = 0; uint64_t generation = 0;
++            bool cached = false, resident = false;
++            llama_lazy_lora_adapter_status(ctx, (int32_t) i, &state, &ref_count, &generation, &cached, &resident);
++            static const char * state_names[] = {"UNLOADED", "LOADING", "READY"};
++            adapters.push_back({
++                {"adapter_id", i},
++                {"path", lazy_lora_adapters[i]->path},
++                {"state", state >= 0 && state <= 2 ? state_names[state] : "?"},
++                {"ref_count", ref_count},
++                {"generation", generation},
++                {"cached", cached},
++                {"resident", resident},
++            });
++        }
++        json jobs = json::array();
++        {
++            std::lock_guard<std::mutex> lock(async_loader.mutex);
++            auto add = [&](const std::shared_ptr<adapter_async_job> & job, const char * phase) {
++                jobs.push_back({{"job_id", job->job_id}, {"adapter_id", job->adapter_id}, {"phase", phase}});
++            };
++            for (auto & job : async_loader.queue) { add(job, "QUEUED"); }
++            if (async_loader.running) { add(async_loader.running, "RUNNING"); }
++            for (auto & job : async_loader.done) { add(job, "DONE"); }
++        }
++        return json{
++            {"capacity", capacity},
++            {"published", n_published},
++            {"reserved", n_reserved},
++            {"adapters", adapters},
++            {"loader_jobs", jobs},
++            {"mono_us", ggml_time_us()},
++        };
++    }
++
++    bool acquire_slot_adapter(server_slot & slot, int32_t adapter_id) {
++        if (adapter_id < 0) {
++            return true;
++        }
++
++        if (slot.adapter_acquired) {
++            if (slot.acquired_adapter_id == adapter_id) {
++                return true;
++            }
++
++            const int32_t previous_adapter_id = slot.acquired_adapter_id;
++            LOG_VERBOSE("slot switching LoRA adapter", {
++                {"id_slot", slot.id},
++                {"id_task", slot.id_task},
++                {"adapter_id", previous_adapter_id},
++                {"next_adapter_id", adapter_id},
++            });
++            llama_lora_adapter_release(ctx, previous_adapter_id);
++            slot.adapter_acquired = false;
++            slot.acquired_adapter_id = -1;
++        }
++
++        LOG_VERBOSE("slot acquiring LoRA adapter", {
++            {"id_slot", slot.id},
++            {"id_task", slot.id_task},
++            {"adapter_id", adapter_id},
++        });
++        LOG_INFO("repeated miss cache", {{"rm_event", "cache"}, {"mono_us", ggml_time_us()}, {"id_task", slot.id_task}, {"adapter_id", adapter_id}, {"cache_hit", llama_lora_adapter_cached(ctx, adapter_id)}});
++        const int64_t timeline_load_start = ggml_time_us();
++        const int timeline_load_rc = llama_lazy_load_lora_adapter(ctx, adapter_id);
++        const int64_t timeline_load_end = ggml_time_us();
++        LOG_INFO("timeline acquire", {{"timeline_event", "acquire"}, {"start_us", timeline_load_start}, {"end_us", timeline_load_end}, {"id_task", slot.id_task}, {"adapter_id", adapter_id}, {"rc", timeline_load_rc}});
++        if (timeline_load_rc != 0) {
++            LOG_ERROR("slot failed to acquire LoRA adapter", {
++                {"id_slot", slot.id},
++                {"id_task", slot.id_task},
++                {"adapter_id", adapter_id},
++            });
++            return false;
++        }
++
++        slot.adapter_acquired = true;
++        slot.acquired_adapter_id = adapter_id;
++        slot.response_adapter_id = adapter_id;
++        return true;
++    }
++
++    void release_slot(server_slot & slot) {
++        LOG_INFO("repeated miss release", {{"rm_event", "release"}, {"mono_us", ggml_time_us()}, {"id_task", slot.id_task}, {"adapter_id", slot.params.adapter_id}, {"n_decoded", slot.n_decoded}});
++        if (slot.adapter_acquired) {
++            const int32_t adapter_id = slot.acquired_adapter_id;
++            LOG_VERBOSE("slot releasing LoRA adapter", {
++                {"id_slot", slot.id},
++                {"id_task", slot.id_task},
++                {"adapter_id", adapter_id},
++            });
++            slot.adapter_acquired = false;
++            slot.acquired_adapter_id = -1;
++            llama_lora_adapter_release(ctx, adapter_id);
++        }
++        slot.release();
+     }
+ 
+     std::vector<llama_token> tokenize(const json & json_prompt, bool add_special) const {
+@@ -927,6 +1506,9 @@ struct server_context {
+     }
+ 
+     bool launch_slot_with_task(server_slot & slot, const server_task & task) {
++        const int64_t rm_slot_us = ggml_time_us();
++        const int rm_adapter = json_value(task.data, "adapter_id", -1);
++        LOG_INFO("repeated miss slot", {{"rm_event", "slot"}, {"mono_us", rm_slot_us}, {"id_task", task.id}, {"id_slot", slot.id}, {"label", json_value(task.data, "experiment_label", std::string("warmup"))}, {"adapter_id", rm_adapter}, {"cache_hit", rm_adapter >= 0 && llama_lora_adapter_cached(ctx, rm_adapter)}, {"a_cached", llama_lora_adapter_cached(ctx, 0)}, {"a_ref_count", lazy_lora_adapters[0]->ref_count}});
+         slot_params default_params;
+         // Sampling parameter defaults are loaded from the global server context (but individual requests can still override them)
+         auto default_sparams = params.sparams;
+@@ -965,6 +1547,38 @@ struct server_context {
+         slot.sparams.n_probs           = json_value(data, "n_probs",           default_sparams.n_probs);
+         slot.sparams.min_keep          = json_value(data, "min_keep",          default_sparams.min_keep);
+         slot.params.adapter_id        = json_value(data, "adapter_id",       default_params.adapter_id);
++        slot.params.adapter_set = data.contains("adapter_id") && data.at("adapter_id").is_number_integer(); //추가
++        slot.params.load_policy = json_value(data, "adapter_load_policy", std::string("sync"));
++        slot.params.load_wait_timeout_ms = json_value(data, "adapter_load_wait_timeout_ms", 60000.0);
++        slot.params.load_fail_inject = json_value(data, "adapter_load_fail_inject", false);
++        if ((slot.params.load_policy != "sync" && slot.params.load_policy != "backend-async") ||
++            !std::isfinite(slot.params.load_wait_timeout_ms) || slot.params.load_wait_timeout_ms < 0) {
++            send_error(task, "invalid adapter loading policy/timeout", ERROR_TYPE_INVALID_REQUEST);
++            return false;
++        }
++        slot.routing_explicit = slot.params.adapter_set;
++        if (router_enabled && slot.routing_explicit && slot.params.adapter_id == params.router_lora_id) {
++            send_error(task, "Resident Router is not a task adapter", ERROR_TYPE_INVALID_REQUEST);
++            return false;
++        }
++        if (slot.routing_explicit) {
++            LOG_INFO("adapter routing", {
++                {"id_slot", slot.id}, {"id_task", slot.id_task},
++                {"routing_mode", "explicit"}, {"adapter_id", slot.params.adapter_id},
++            });
++        }
++
++        if (slot.params.adapter_set &&
++            (slot.params.adapter_id < -1 ||
++             slot.params.adapter_id >=
++                 static_cast<int32_t>(lazy_lora_adapters.size()))) {
++            send_error(
++            task,
++            "adapter_id is out of range",
++            ERROR_TYPE_INVALID_REQUEST
++            );
++            return false;
++        }
+ 
+         // process "json_schema" and "grammar"
+         if (data.contains("json_schema") && !data.at("json_schema").is_null() && data.contains("grammar") && !data.at("grammar").is_null()) {
+@@ -1021,6 +1635,22 @@ struct server_context {
+             }
+         }
+ 
++        if (router_should_route(router_enabled, slot.routing_explicit,
++                task.cmpl_type == SERVER_TASK_CMPL_TYPE_EMBEDDING)) {
++            // router_text is raw user text; prompt may contain the task chat template.
++            if (json_value(data, "__oaicompat", false) && !data.contains("router_text")) {
++                send_error(task, "Chat API routing requires explicit raw router_text", ERROR_TYPE_INVALID_REQUEST);
++                return false;
++            }
++            const json raw_text = data.contains("router_text") ? data.at("router_text") : slot.prompt;
++            if (!raw_text.is_string() || raw_text.get<std::string>().empty() ||
++                    task.cmpl_type == SERVER_TASK_CMPL_TYPE_INFILL || !system_prompt.empty()) {
++                send_error(task, "Router requires nonempty router_text/plain prompt and no server system prompt", ERROR_TYPE_INVALID_REQUEST);
++                return false;
++            }
++            slot.router_text = raw_text.get<std::string>();
++        }
++
+         {
+             slot.sparams.logit_bias.clear();
+ 
+@@ -1166,7 +1796,7 @@ struct server_context {
+ 
+         // release all slots
+         for (server_slot & slot : slots) {
+-            slot.release();
++            release_slot(slot);
+         }
+ 
+         system_need_update = true;
+@@ -1411,6 +2041,7 @@ struct server_context {
+             {"stop",                true},
+             {"model",               params.model_alias},
+             {"tokens_predicted",    slot.n_decoded},
++            {"selected_task_adapter_id", slot.response_adapter_id},
+             {"tokens_evaluated",    slot.n_prompt_tokens},
+             {"first_token_latency", slot.t_first_token},
+             {"prompt_process_time", slot.t_prompt_processing},
+@@ -1574,7 +2205,7 @@ struct server_context {
+             if (result.error) {
+                 error_handler(result.data);
+                 cancel_tasks(id_tasks);
+-                break;
++                return; // Do not overwrite the error with a success/null response.
+             }
+ 
+             size_t idx = result.data["index"];
+@@ -1658,7 +2289,7 @@ struct server_context {
+                     slot->id_task   = task.id;
+                     slot->cmpl_type = task.cmpl_type;
+                     slot->index     = json_value(task.data, "index", 0);
+-                    slot->t_first_token = ggml_time_us();
++                    slot->t_start_first_token = ggml_time_us();
+ 
+                     if (!launch_slot_with_task(*slot, task)) {
+                         LOG_ERROR("error while launching slot", task.data);
+@@ -1670,7 +2301,7 @@ struct server_context {
+                     // release slot linked with the task id
+                     for (auto & slot : slots) {
+                         if (slot.id_task == task.id_target) {
+-                            slot.release();
++                            release_slot(slot);
+                             break;
+                         }
+                     }
+@@ -1750,6 +2381,7 @@ struct server_context {
+                         { "kv_cache_used_cells",             llama_get_kv_cache_used_cells(ctx)},
+ 
+                         { "slots",                           slots_data },
++                        { "adapter_cache", adapter_cache_status() },
+                     };
+ 
+                     if (json_value(task.data, "reset_bucket", false)) {
+@@ -1894,6 +2526,8 @@ struct server_context {
+             system_prompt_update();
+         }
+ 
++        publish_async_loads();
++
+         // check if all slots are idle
+         {
+             bool all_idle = true;
+@@ -2034,19 +2668,35 @@ struct server_context {
+                 if (slot.state == SLOT_STATE_PROCESSING_PROMPT) {
+                     auto & prompt_tokens = slot.prompt_tokens;
+ 
+-                    if (slot.n_past != 0 && slot.n_past == slot.n_prompt_tokens && !slot.params.adapter_set) {
++                    if (router_should_route(router_enabled, slot.routing_explicit,
++                            slot.cmpl_type == SERVER_TASK_CMPL_TYPE_EMBEDDING) &&
++                        !slot.params.adapter_set) {
++                        slot.routing_prompt = true;
++                        slot.t_start_router = ggml_time_us();
+                         slot.params.adapter_set = true;
+-                        slot.n_past = 0;
+-                        int n_vocab = llama_n_vocab(llama_get_model(ctx));
+-                        int n_adapter = lazy_lora_adapters.size();
+-                        
+-                        slot.params.adapter_id = get_best_adapter_index_mock(n_vocab, n_adapter);
++                        slot.params.adapter_id = params.router_lora_id;
++                        slot.prompt_tokens.clear();
++                        slot.cache_tokens.clear();
++                        llama_kv_cache_seq_rm(ctx, slot.id + 1, -1, -1);
++                        LOG_INFO("adapter routing", {
++                            {"id_slot", slot.id}, {"id_task", slot.id_task},
++                            {"routing_mode", "router"}, {"router_adapter_id", params.router_lora_id},
++                        });
+                     }
+ 
+                     // check if the adapter lora is loaded
+-                    if (slot.params.adapter_id != -1 && slot.params.adapter_set) {
++                    if (slot.params.adapter_id != -1 &&
++                        slot.params.adapter_set &&
++                        !slot.routing_prompt &&
++                        !slot.adapter_acquired) {
+                         int32_t adapter_id = slot.params.adapter_id;
+-                        llama_lazy_load_lora_adapter(ctx, adapter_id);
++                        if (slot.params.load_policy == "backend-async" || async_loader.find(adapter_id)) {
++                            if (!ensure_slot_adapter_async(slot, adapter_id)) { continue; }
++                        } else if (!acquire_slot_adapter(slot, adapter_id)) {
++                            send_error(slot, "Unable to load the requested LoRA adapter", ERROR_TYPE_SERVER);
++                            release_slot(slot);
++                            continue;
++                        }
+                     }
+ 
+                     // we haven't tokenized the prompt yet - do it now:
+@@ -2057,9 +2707,22 @@ struct server_context {
+                         });
+ 
+                         slot.t_start_process_prompt = ggml_time_us();
++                        LOG_INFO("repeated miss prefill", {{"rm_event", "prefill_begin"}, {"mono_us", slot.t_start_process_prompt}, {"id_task", slot.id_task}, {"adapter_id", slot.params.adapter_id}});
+                         slot.t_start_generation = 0;
+ 
+-                        if (slot.cmpl_type == SERVER_TASK_CMPL_TYPE_INFILL) {
++                        if (slot.routing_prompt) {
++                            const std::string router_input =
++                                "Please analyze this text and predict which adapter is suitable for it.\nText: "
++                                + slot.router_text;
++                            prompt_tokens = tokenize(json(router_input), true);
++                            const size_t original_tokens = prompt_tokens.size();
++                            if (prompt_tokens.size() > 512) { prompt_tokens.resize(512); }
++                            LOG_INFO("Router input contract", {
++                                {"id_slot", slot.id}, {"id_task", slot.id_task},
++                                {"cutoff", 512}, {"original_tokens", original_tokens},
++                                {"token_ids", prompt_tokens},
++                            });
++                        } else if (slot.cmpl_type == SERVER_TASK_CMPL_TYPE_INFILL) {
+                             const bool add_bos = llama_add_bos_token(model);
+                             bool suff_rm_leading_spc = true;
+                             if (params.input_suffix.find_first_of(' ') == 0 && params.input_suffix.size() > 1) {
+@@ -2092,7 +2755,19 @@ struct server_context {
+ 
+                             prompt_tokens = embd_inp;
+                         } else {
+-                            prompt_tokens = tokenize(slot.prompt, system_prompt.empty()); // add BOS if there isn't system prompt
++                            bool add_special = system_prompt.empty();
++                            if (slot.prompt.is_string()) {
++                                const std::string bos = llama_token_to_piece(ctx, llama_token_bos(model), true);
++                                const std::string & text = slot.prompt.get_ref<const std::string &>();
++                                if (!bos.empty() && text.compare(0, bos.size(), bos) == 0) {
++                                    add_special = false; // Chat template already includes BOS.
++                                }
++                            }
++                            prompt_tokens = tokenize(slot.prompt, add_special);
++                            LOG_INFO("Task input contract", {
++                                {"id_slot", slot.id}, {"id_task", slot.id_task},
++                                {"token_ids", prompt_tokens},
++                            });
+                         }
+ 
+                         slot.n_past = 0;
+@@ -2114,7 +2789,7 @@ struct server_context {
+                                 {"id_task", slot.id_task}
+                             });
+ 
+-                            slot.release();
++                            release_slot(slot);
+                             slot.print_timings();
+                             send_final_response(slot);
+                             continue;
+@@ -2123,7 +2798,7 @@ struct server_context {
+                         if (slot.cmpl_type == SERVER_TASK_CMPL_TYPE_EMBEDDING) {
+                             // this prompt is too large to process - discard it
+                             if (slot.n_prompt_tokens > n_ubatch) {
+-                                slot.release();
++                                release_slot(slot);
+                                 send_error(slot, "input is too large to process. increase the physical batch size", ERROR_TYPE_SERVER);
+                                 continue;
+                             }
+@@ -2285,7 +2960,7 @@ struct server_context {
+                     });
+ 
+                     // entire prompt has been processed
+-                    if (slot.n_past == slot.n_prompt_tokens && slot.params.adapter_set) {
++                    if (slot.n_past == slot.n_prompt_tokens) {
+                         slot.state = SLOT_STATE_DONE_PROMPT;
+ 
+                         GGML_ASSERT(batch.n_tokens > 0);
+@@ -2317,6 +2992,7 @@ struct server_context {
+ 
+         if (batch.n_tokens == 0) {
+             LOG_VERBOSE("no tokens to decode", {});
++            if (async_loader.has_pending()) { async_loader.wait_done(std::chrono::milliseconds(2)); }
+             return;
+         }
+ 
+@@ -2372,7 +3048,20 @@ struct server_context {
+                 0, 0, 0, // unused
+             };
+ 
++            json timeline_members = json::array();
++            for (const auto & ts : slots) {
++                int count = 0;
++                for (int ti = 0; ti < batch_view.n_tokens; ++ti) {
++                    for (int si = 0; si < batch_view.n_seq_id[ti]; ++si) {
++                        if (batch_view.seq_id[ti][si] == ts.id + 1) ++count;
++                    }
++                }
++                if (count) timeline_members.push_back({{"id_task", ts.id_task}, {"id_slot", ts.id}, {"adapter_id", ts.params.adapter_id}, {"tokens", count}, {"phase", ts.state == SLOT_STATE_GENERATING ? "generation" : "prefill"}});
++            }
++            const int64_t timeline_decode_start = ggml_time_us();
+             const int ret = llama_decode(ctx, batch_view);
++            const int64_t timeline_decode_end = ggml_time_us();
++            LOG_INFO("timeline decode", {{"timeline_event", "decode"}, {"start_us", timeline_decode_start}, {"end_us", timeline_decode_end}, {"members", timeline_members}, {"rc", ret}});
+             metrics.on_decoded(slots);
+ 
+             if (ret != 0) {
+@@ -2384,7 +3073,7 @@ struct server_context {
+                         {"ret",     ret},
+                     });
+                     for (auto & slot : slots) {
+-                        slot.release();
++                        release_slot(slot);
+                         send_error(slot, "Input prompt is too big compared to KV size. Please try increasing KV size.");
+                     }
+                     break; // break loop of n_batch
+@@ -2412,11 +3101,98 @@ struct server_context {
+                     if (slot.cmpl_type == SERVER_TASK_CMPL_TYPE_EMBEDDING) {
+                         // prompt evaluated for embedding
+                         send_embedding(slot, batch_view);
+-                        slot.release();
++                        release_slot(slot);
+                         slot.i_batch = -1;
+                         continue; // continue loop of slots
+                     }
+ 
++                    if (slot.routing_prompt) {
++                        const float * hidden = llama_get_hidden_ith(ctx, slot.i_batch - i);
++                        const std::vector<float> scores = router_classifier_score(
++                                router, hidden, llama_n_embd(model));
++                        if (scores.size() != router.num_labels) {
++                            send_error(slot, "Unable to obtain Router hidden state", ERROR_TYPE_SERVER);
++                            release_slot(slot);
++                            slot.i_batch = -1;
++                            continue;
++                        }
++                        const std::vector<int32_t> ranked = router_rank_labels(scores);
++                        const std::vector<int32_t> candidates = router_top_candidates(
++                                ranked, params.router_top_k);
++                        std::vector<bool> resident(lazy_lora_adapters.size(), false);
++                        for (int32_t adapter_id : params.router_label_map) {
++                            if (adapter_id != params.router_lora_id) {
++                                resident[adapter_id] = llama_lora_adapter_cached(ctx, adapter_id);
++                            }
++                        }
++                        bool cache_hit = false;
++                        const int32_t selected = router_select_adapter(
++                                candidates, params.router_label_map, params.router_lora_id,
++                                resident, cache_hit);
++                        json ranked_json = json::array();
++                        for (int32_t label : ranked) {
++                            ranked_json.push_back({
++                                {"label", label},
++                                {"task_adapter_id", params.router_label_map[label]},
++                            });
++                        }
++                        json candidate_json = json::array();
++                        for (int32_t label : candidates) {
++                            candidate_json.push_back({
++                                {"label", label},
++                                {"task_adapter_id", params.router_label_map[label]},
++                            });
++                        }
++                        LOG_INFO("Router decision", {
++                            {"id_slot", slot.id}, {"id_task", slot.id_task},
++                            {"raw_scores", scores}, {"ranked", ranked_json},
++                            {"task_cached_before_selection", resident},
++                            {"router_top_k", params.router_top_k},
++                            {"candidates", candidate_json},
++                            {"selection_reason", cache_hit ? "cache_hit" : "top1_load"},
++                            {"selected_task_adapter_id", selected},
++                        });
++                        const int64_t router_done = ggml_time_us();
++                        LOG_INFO("Router latency", {
++                            {"id_slot", slot.id}, {"id_task", slot.id_task},
++                            {"router_latency_ms", (router_done - slot.t_start_router) / 1e3},
++                        });
++
++                        // The resident Router has no task-cache reference to release.
++                        GGML_ASSERT(!slot.adapter_acquired && "resident Router must not use task adapter references");
++                        LOG_INFO("Router resident pass complete", {
++                            {"id_slot", slot.id}, {"id_task", slot.id_task},
++                            {"router_adapter_id", params.router_lora_id},
++                        });
++                        slot.params.adapter_id = selected;
++                        slot.routing_prompt = false;
++                        const bool routed_async = slot.params.load_policy == "backend-async" || async_loader.find(selected) != nullptr;
++                        if (selected < 0 || (!routed_async && !acquire_slot_adapter(slot, selected))) {
++                            send_error(slot, "Unable to load the routed LoRA adapter", ERROR_TYPE_SERVER);
++                            release_slot(slot);
++                            slot.i_batch = -1;
++                            continue;
++                        }
++                        LOG_INFO("task adapter acquire result", {
++                            {"id_slot", slot.id}, {"id_task", slot.id_task},
++                            {"adapter_id", selected},
++                            {"cache_result", cache_hit ? "hit" : "loaded_or_promoted"},
++                        });
++
++                        // Router and task passes must not share prompt KV state.
++                        llama_kv_cache_seq_rm(ctx, slot.id + 1, -1, -1);
++                        slot.prompt_tokens.clear();
++                        slot.n_past = 0;
++                        slot.n_past_se = 0;
++                        slot.ga_i = 0;
++                        slot.n_prompt_tokens_processed = 0;
++                        slot.cache_tokens.clear();
++                        gpt_sampler_reset(slot.smpl);
++                        slot.state = SLOT_STATE_PROCESSING_PROMPT;
++                        slot.i_batch = -1;
++                        continue;
++                    }
++
+                     int32_t adapter_id = slot.params.adapter_id;
+                     if (adapter_id != -1) {
+                         if (!llama_lora_adapter_loaded(ctx, adapter_id)) {
+@@ -2425,6 +3201,9 @@ struct server_context {
+                                 {"id_task", slot.id_task},
+                                 {"adapter_id", adapter_id}
+                             });
++                            send_error(slot, "The requested LoRA adapter is no longer loaded", ERROR_TYPE_SERVER);
++                            release_slot(slot);
++                            slot.i_batch = -1;
+                             continue; // continue loop of slots
+                         }
+                     }
+@@ -2439,12 +3218,20 @@ struct server_context {
+                 const llama_token id = gpt_sampler_sample(slot.smpl, ctx, slot.i_batch - i);
+ 
+                 gpt_sampler_accept(slot.smpl, id, true);
++                LOG_INFO("timeline token", {{"timeline_event", "token"}, {"mono_us", ggml_time_us()}, {"id_task", slot.id_task}, {"adapter_id", slot.params.adapter_id}, {"token_id", id}, {"token_index", slot.n_decoded + 1}});
++                LOG_INFO("token ready timing", {{"async_token_ready_us", ggml_time_us()}, {"id_task", slot.id_task}, {"adapter_id", slot.params.adapter_id}});
+ 
+                 slot.n_decoded += 1;
+                 if (slot.n_decoded == 1) {
+                     slot.t_start_generation = ggml_time_us();
++                    LOG_INFO("repeated miss prefill end", {{"rm_event", "prefill_end"}, {"mono_us", slot.t_start_generation}, {"id_task", slot.id_task}, {"adapter_id", slot.params.adapter_id}});
++                    slot.t_first_token = (slot.t_start_generation - slot.t_start_first_token) / 1e3;
+                     slot.t_prompt_processing = (slot.t_start_generation - slot.t_start_process_prompt) / 1e3;
+                     metrics.on_prompt_eval(slot);
++                    LOG_INFO("request TTFT", {
++                        {"id_slot", slot.id}, {"id_task", slot.id_task},
++                        {"ttft_ms", (slot.t_start_generation - slot.t_start_process_prompt) / 1e3},
++                    });
+                 }
+ 
+                 result.tok = id;
+@@ -2460,11 +3247,7 @@ struct server_context {
+ 
+                 if (!process_token(result, slot)) {
+                     // release slot because of stop condition
+-                    int32_t adapter_id = slot.params.adapter_id;
+-                    if (adapter_id >= 0) {
+-                        llama_lora_adapter_release(ctx, adapter_id);
+-                    }
+-                    slot.release();
++                    release_slot(slot);
+                     slot.print_timings();
+                     send_final_response(slot);
+                     metrics.on_prediction(slot);
+@@ -2474,10 +3257,6 @@ struct server_context {
+             }
+ 
+             for (auto & slot : slots) {
+-                // compute the first token latency
+-                if (slot.state == SLOT_STATE_GENERATING && slot.n_decoded == 1) {
+-                    slot.t_first_token = (ggml_time_us() - slot.t_first_token) / 1e3;
+-                }
+                 // set the logits for adapter selection
+                 if (slot.state == SLOT_STATE_PROCESSING_PROMPT) {
+                     if (!slot.params.adapter_set) {
+@@ -2772,6 +3551,21 @@ int main(int argc, char ** argv) {
+         res_ok(res, result.data.at("slots"));
+     };
+ 
++    // adapter cache snapshot taken on the main thread (same task path as /slots)
++    const auto handle_adapter_cache = [&](const httplib::Request &, httplib::Response & res) {
++        server_task task;
++        task.id = ctx_server.queue_tasks.get_new_id();
++        task.type = SERVER_TASK_TYPE_METRICS;
++
++        ctx_server.queue_results.add_waiting_task_id(task.id);
++        ctx_server.queue_tasks.post(task, true); // high-priority task
++
++        server_task_result result = ctx_server.queue_results.recv(task.id);
++        ctx_server.queue_results.remove_waiting_task_id(task.id);
++
++        res_ok(res, result.data.at("adapter_cache"));
++    };
++
+     const auto handle_metrics = [&](const httplib::Request &, httplib::Response & res) {
+         if (!params.endpoint_metrics) {
+             res_error(res, format_error_response("This server does not support metrics endpoint. Start it with `--metrics`", ERROR_TYPE_NOT_SUPPORTED));
+@@ -3018,6 +3812,9 @@ int main(int argc, char ** argv) {
+         }
+ 
+         std::vector<server_task> tasks = ctx_server.create_tasks_cmpl(data, cmpl_type);
++        for (const auto & rt : tasks) {
++            LOG_INFO("repeated miss queued", {{"rm_event", "queued"}, {"mono_us", ggml_time_us()}, {"id_task", rt.id}, {"label", json_value(data, "experiment_label", std::string("warmup"))}});
++        }
+         ctx_server.queue_results.add_waiting_tasks(tasks);
+         ctx_server.queue_tasks.post(tasks);
+ 
+@@ -3055,7 +3852,9 @@ int main(int argc, char ** argv) {
+     };
+ 
+     const auto handle_completions = [&handle_completions_generic](const httplib::Request & req, httplib::Response & res) {
++        const int64_t rm_arrive_us = ggml_time_us();
+         json data = json::parse(req.body);
++        LOG_INFO("repeated miss arrival", {{"rm_event", "arrival"}, {"mono_us", rm_arrive_us}, {"label", json_value(data, "experiment_label", std::string("warmup"))}, {"adapter_id", json_value(data, "adapter_id", -1)}});
+         return handle_completions_generic(SERVER_TASK_CMPL_TYPE_NORMAL, data, res);
+     };
+ 
+@@ -3306,6 +4105,7 @@ int main(int argc, char ** argv) {
+     svr->Post("/lora-adapters",       handle_lora_adapters_apply);
+     // Save & load slots
+     svr->Get ("/slots",               handle_slots);
++    svr->Get ("/adapter-cache", handle_adapter_cache);
+     svr->Post("/slots/:id_slot",      handle_slots_action);
+ 
+     //
+@@ -3319,8 +4119,9 @@ int main(int argc, char ** argv) {
+     svr->new_task_queue = [&params] { return new httplib::ThreadPool(params.n_threads_http); };
+ 
+     // clean up function, to be called before exit
+-    auto clean_up = [&svr]() {
++    auto clean_up = [&svr, &ctx_server]() {
+         svr->stop();
++        ctx_server.clear();
+         llama_backend_free();
+     };
+ 
+@@ -3374,25 +4175,27 @@ int main(int argc, char ** argv) {
+             &server_context::update_slots, &ctx_server));
+ 
+         shutdown_handler = [&](int) {
++            ctx_server.shutting_down.store(true);
+             ctx_server.queue_tasks.terminate();
+         };
+-        ctx_server.queue_tasks.start_loop();
+-    }
+ 
+ #if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+-    struct sigaction sigint_action;
+-    sigint_action.sa_handler = signal_handler;
+-    sigemptyset (&sigint_action.sa_mask);
+-    sigint_action.sa_flags = 0;
+-    sigaction(SIGINT, &sigint_action, NULL);
+-    sigaction(SIGTERM, &sigint_action, NULL);
++        struct sigaction sigint_action;
++        sigint_action.sa_handler = signal_handler;
++        sigemptyset (&sigint_action.sa_mask);
++        sigint_action.sa_flags = 0;
++        sigaction(SIGINT, &sigint_action, NULL);
++        sigaction(SIGTERM, &sigint_action, NULL);
+ #elif defined (_WIN32)
+-    auto console_ctrl_handler = +[](DWORD ctrl_type) -> BOOL {
+-        return (ctrl_type == CTRL_C_EVENT) ? (signal_handler(SIGINT), true) : false;
+-    };
+-    SetConsoleCtrlHandler(reinterpret_cast<PHANDLER_ROUTINE>(console_ctrl_handler), true);
++        auto console_ctrl_handler = +[](DWORD ctrl_type) -> BOOL {
++            return (ctrl_type == CTRL_C_EVENT) ? (signal_handler(SIGINT), true) : false;
++        };
++        SetConsoleCtrlHandler(reinterpret_cast<PHANDLER_ROUTINE>(console_ctrl_handler), true);
+ #endif
+ 
++        ctx_server.queue_tasks.start_loop();
++    }
++
+     clean_up();
+     t.join();
+ 
+diff --git a/edgelora/ggml/src/ggml-cuda/acc.cu b/edgelora/ggml/src/ggml-cuda/acc.cu
+index 96bfe1c9d81470761639bb30dc6da5cddbe9e610..6b3bc27a93526a047a4d8ba49752924e788c46d7 100644
+--- a/edgelora/ggml/src/ggml-cuda/acc.cu
++++ b/edgelora/ggml/src/ggml-cuda/acc.cu
+@@ -1,5 +1,17 @@
++#ifdef EDGELORA_ACC_STANDALONE_TEST
++#include <cuda_runtime.h>
++#define CUDA_ACC_BLOCK_SIZE 256
++#else
+ #include "acc.cuh"
++#endif
+ 
++#include <climits>
++#include <cstddef>
++#include <cstdint>
++#include <limits>
++
++// Preserve the existing generic operation as the fallback. It intentionally
++// traverses the complete destination and also copies unaffected elements.
+ static __global__ void acc_f32(const float * x, const float * y, float * dst, const int ne,
+     const int ne10, const int ne11, const int ne12,
+     const int nb1, const int nb2, int offset) {
+@@ -25,23 +37,127 @@ static void acc_f32_cuda(const float * x, const float * y, float * dst, const in
+     acc_f32<<<num_blocks, CUDA_ACC_BLOCK_SIZE, 0, stream>>>(x, y, dst, n_elements, ne10, ne11, ne12, nb1, nb2, offset);
+ }
+ 
++// No restrict qualifiers: src0 and dst must alias in this specialized kernel.
++// The addition has the same operand order as the generic acc_f32 operation.
++static __global__ void acc_f32_inplace_column(const float * src0, const float * src1,
++        float * dst, int count, int offset) {
++    const int i = blockDim.x * blockIdx.x + threadIdx.x;
++    if (i < count) {
++        dst[offset + i] = src0[offset + i] + src1[i];
++    }
++}
++
++// A small POD descriptor makes the exact production predicate/dispatcher
++// testable without duplicating the kernel or requiring the full model runtime.
++struct edgelora_acc_descriptor {
++    const float * src0;
++    const float * src1;
++    float * dst;
++    int64_t dst_ne[4];
++    int64_t src1_ne[4];
++    size_t dst_bytes;
++    size_t src1_bytes;
++    int64_t dst_elements;
++    int32_t params[5];
++    bool all_f32;
++    bool same_src0_dst_shape;
++    bool dst_contiguous;
++    bool src0_contiguous;
++    bool src1_contiguous;
++};
++
++static bool edgelora_acc_can_use_column(const edgelora_acc_descriptor & d) {
++    if (!d.all_f32 || !d.same_src0_dst_shape || !d.dst_contiguous ||
++            !d.src0_contiguous || !d.src1_contiguous || d.params[4] != 1 ||
++            d.src0 == nullptr || d.src1 == nullptr || d.dst == nullptr || d.src0 != d.dst) {
++        return false;
++    }
++    if (d.dst_ne[0] <= 0 || d.dst_ne[1] <= 0 || d.dst_ne[2] != 1 || d.dst_ne[3] != 1 ||
++            d.src1_ne[0] != d.dst_ne[0] || d.src1_ne[1] != 1 ||
++            d.src1_ne[2] != 1 || d.src1_ne[3] != 1) {
++        return false;
++    }
++    // Existing ACC op_params and generic CUDA indexing are signed int32.
++    // Keep the specialized path strictly inside that representable domain.
++    if (d.dst_ne[0] > INT_MAX / int64_t(sizeof(float)) ||
++            d.dst_ne[1] > INT_MAX / (d.dst_ne[0] * int64_t(sizeof(float)))) {
++        return false;
++    }
++    const size_t column_bytes = size_t(d.dst_ne[0]) * sizeof(float);
++    const size_t matrix_bytes = column_bytes * size_t(d.dst_ne[1]);
++    if (d.dst_bytes != matrix_bytes || d.src1_bytes != column_bytes ||
++            d.dst_elements != d.dst_ne[0] * d.dst_ne[1] ||
++            d.params[0] != int32_t(column_bytes) ||
++            d.params[1] != int32_t(matrix_bytes) ||
++            d.params[2] != int32_t(matrix_bytes) || d.params[3] < 0) {
++        return false;
++    }
++    const size_t offset_bytes = size_t(d.params[3]);
++    if (offset_bytes % column_bytes != 0 || column_bytes > d.dst_bytes ||
++            offset_bytes > d.dst_bytes - column_bytes) {
++        return false;
++    }
++    // Reject any source-update/destination overlap, not merely equal pointers.
++    // This avoids cross-thread read/write hazards for shifted overlapping views.
++    const uintptr_t update_begin = reinterpret_cast<uintptr_t>(d.src1);
++    const uintptr_t output_begin = reinterpret_cast<uintptr_t>(d.dst);
++    if (update_begin > std::numeric_limits<uintptr_t>::max() - d.src1_bytes ||
++            output_begin > std::numeric_limits<uintptr_t>::max() - d.dst_bytes) {
++        return false;
++    }
++    const uintptr_t update_end = update_begin + d.src1_bytes;
++    const uintptr_t output_end = output_begin + d.dst_bytes;
++    return update_end <= output_begin || output_end <= update_begin;
++}
++
++// Return the branch actually launched. Production does not synchronize here;
++// tests assert branch selection independently of numeric comparisons.
++static bool edgelora_acc_launch(const edgelora_acc_descriptor & d, cudaStream_t stream) {
++    if (edgelora_acc_can_use_column(d)) {
++        const int count = int(d.src1_ne[0]);
++        const int blocks = (count + CUDA_ACC_BLOCK_SIZE - 1) / CUDA_ACC_BLOCK_SIZE;
++        acc_f32_inplace_column<<<blocks, CUDA_ACC_BLOCK_SIZE, 0, stream>>>(
++                d.src0, d.src1, d.dst, count, d.params[3] / int(sizeof(float)));
++        return true;
++    }
++    acc_f32_cuda(d.src0, d.src1, d.dst, int(d.dst_elements),
++            int(d.src1_ne[0]), int(d.src1_ne[1]), int(d.src1_ne[2]),
++            d.params[0] / int(sizeof(float)), d.params[1] / int(sizeof(float)),
++            d.params[3] / int(sizeof(float)), stream);
++    return false;
++}
++
++#ifndef EDGELORA_ACC_STANDALONE_TEST
+ void ggml_cuda_op_acc(ggml_backend_cuda_context & ctx, ggml_tensor * dst) {
+     const ggml_tensor * src0 = dst->src[0];
+     const ggml_tensor * src1 = dst->src[1];
+-    const float * src0_d = (const float *)src0->data;
+-    const float * src1_d = (const float *)src1->data;
+-    float * dst_d = (float *)dst->data;
+     cudaStream_t stream = ctx.stream();
+ 
+     GGML_ASSERT(src0->type == GGML_TYPE_F32);
+     GGML_ASSERT(src1->type == GGML_TYPE_F32);
+     GGML_ASSERT( dst->type == GGML_TYPE_F32);
+-    GGML_ASSERT(dst->ne[3] == 1); // just 3D tensors supported
+-
+-    int nb1 = dst->op_params[0] / 4; // 4 bytes of float32
+-    int nb2 = dst->op_params[1] / 4; // 4 bytes of float32
+-    // int nb3 = dst->op_params[2] / 4; // 4 bytes of float32 - unused
+-    int offset = dst->op_params[3] / 4; // offset in bytes
++    GGML_ASSERT(dst->ne[3] == 1); // Existing generic kernel supports up to 3D.
++    GGML_ASSERT(ggml_nelements(dst) > 0 && ggml_nelements(dst) <= INT_MAX);
+ 
+-    acc_f32_cuda(src0_d, src1_d, dst_d, ggml_nelements(dst), src1->ne[0], src1->ne[1], src1->ne[2], nb1, nb2, offset, stream);
++    edgelora_acc_descriptor d = {};
++    d.src0 = static_cast<const float *>(src0->data);
++    d.src1 = static_cast<const float *>(src1->data);
++    d.dst = static_cast<float *>(dst->data);
++    for (int i = 0; i < 4; ++i) {
++        d.dst_ne[i] = dst->ne[i];
++        d.src1_ne[i] = src1->ne[i];
++    }
++    d.dst_bytes = ggml_nbytes(dst);
++    d.src1_bytes = ggml_nbytes(src1);
++    d.dst_elements = ggml_nelements(dst);
++    for (int i = 0; i < 5; ++i) {
++        d.params[i] = dst->op_params[i];
++    }
++    d.all_f32 = true;
++    d.same_src0_dst_shape = ggml_are_same_shape(src0, dst);
++    d.dst_contiguous = ggml_is_contiguous(dst);
++    d.src0_contiguous = ggml_is_contiguous(src0);
++    d.src1_contiguous = ggml_is_contiguous(src1);
++    edgelora_acc_launch(d, stream);
+ }
++#endif
+diff --git a/edgelora/include/llama.h b/edgelora/include/llama.h
+index 030e431e0c6db49fff3a1c40212ecc33730a595e..13dc773c766ddbdf604708333cbb4f2aa1b0a931 100644
+--- a/edgelora/include/llama.h
++++ b/edgelora/include/llama.h
+@@ -14,6 +14,7 @@
+ #include <stdbool.h>
+ #include <string>
+ #include <unordered_set>
++#include <vector>
+ 
+ #ifdef LLAMA_SHARED
+ #    if defined(_WIN32) && !defined(__MINGW32__)
+@@ -402,28 +403,100 @@ extern "C" {
+         int32_t repeat;
+     };
+ 
++    // Lifecycle of a lazily managed task adapter. Every transition happens on
++    // the owner (server main) thread under llama_context::lora_cache_mutex.
++    // A LOADING container has a pool object reserved for it; that object is
++    // owned exclusively by one loader thread until publish() runs on main.
++    enum llama_lazy_lora_state : int32_t {
++        LLAMA_LAZY_LORA_UNLOADED = 0,
++        LLAMA_LAZY_LORA_LOADING  = 1,
++        LLAMA_LAZY_LORA_READY    = 2,
++    };
++
+     struct llama_lazy_lora_adapter_container {
+         std::string path;
+         struct llama_lora_adapter* adapter;
+         std::atomic<bool> loaded;
+         uint32_t ref_count;
++        // ref_count > 0 while READY means IN_USE; == 0 means EVICTABLE.
++        int32_t  state      = LLAMA_LAZY_LORA_UNLOADED;
++        // Incremented by every reserve(); a completion carrying an older value
++        // is stale and its object is returned to the pool unpublished.
++        uint64_t generation = 0;
++    };
++
++    // A pool object reserved for one adapter ID. Between reserve() and
++    // publish() nothing but the loader thread may touch `object`.
++    struct llama_lora_reservation {
++        int32_t  adapter_id = -1;
++        uint64_t generation = 0;
++        std::shared_ptr<llama_lora_adapter> object;
+     };
+ 
+     class LlamaLoraLRUCache {
+     public:
+         LlamaLoraLRUCache(size_t capacity, struct llama_model* model);
++        ~LlamaLoraLRUCache();
+ 
+         // Access an adapter
+-        std::shared_ptr<llama_lora_adapter> get(size_t adapter_id, struct llama_model* model, const char* path_lora);
++        std::shared_ptr<llama_lora_adapter> get(
++                size_t adapter_id,
++                struct llama_model * model,
++                const char * path_lora,
++                std::vector<struct llama_lazy_lora_adapter_container *> & containers,
++                bool & cache_hit,
++                const uint8_t * staged_data = nullptr,
++                size_t staged_size = 0);
++
++        bool contains(size_t adapter_id) const;
++        bool reserved(size_t adapter_id) const;
++        size_t size() const { return adapter_cache.size(); }
++        size_t n_reserved() const { return reserved_set.size(); }
++        size_t get_capacity() const { return capacity; }
++
++        // Take a pool object for adapter_id without loading it. In-flight
++        // reservations count toward capacity, so this evicts one ref_count==0
++        // victim (LRU order) when no pool object is free. Returns false without
++        // touching any state when every published entry is pinned or the
++        // adapter is already published/reserved. `evicted_id` receives the
++        // victim ID or SIZE_MAX.
++        bool reserve(
++                size_t adapter_id,
++                std::vector<struct llama_lazy_lora_adapter_container *> & containers,
++                llama_lora_reservation & out,
++                size_t & evicted_id,
++                std::string & error);
++
++        // Complete a reservation on the owner thread. success publishes the
++        // object as READY with ref_count unchanged; failure clears the object
++        // and returns it to the pool. Either way the reservation is consumed.
++        void publish(
++                llama_lora_reservation & reservation,
++                std::vector<struct llama_lazy_lora_adapter_container *> & containers,
++                bool success);
+ 
+     private:
+         size_t capacity;
+         std::list<std::pair<size_t, std::shared_ptr<llama_lora_adapter>>> adapter_cache; // Maintain the ordering of access
+         std::unordered_set<size_t> cache_set; // Set to track the adapters in the list
++        std::unordered_set<size_t> reserved_set; // IDs with an outstanding reservation
+         std::stack<std::shared_ptr<llama_lora_adapter>> memory_pool; // Memory pool for adapters
+ 
+-        // Load a new adapter 
+-        std::shared_ptr<llama_lora_adapter> load_adapter(size_t adapter_id, struct llama_model* model, const char* path_lora);
++        // Free one pool object by evicting the LRU ref_count==0 entry.
++        // Returns false when no entry is evictable.
++        bool evict_one(
++                std::vector<struct llama_lazy_lora_adapter_container *> & containers,
++                size_t requester_id,
++                size_t & evicted_id);
++
++        // Load a new adapter
++        std::shared_ptr<llama_lora_adapter> load_adapter(
++                size_t adapter_id,
++                struct llama_model * model,
++                const char * path_lora,
++                std::vector<struct llama_lazy_lora_adapter_container *> & containers,
++                const uint8_t * staged_data,
++                size_t staged_size);
+     };
+ 
+     // Helpers for getting default parameters
+@@ -569,6 +642,21 @@ extern "C" {
+         struct llama_context* ctx,
+         int32_t adapter_id);
+ 
++    // True when the adapter is resident in the LRU, including ref-count 0 entries.
++    LLAMA_API bool llama_lora_adapter_cached(
++        struct llama_context* ctx,
++        int32_t adapter_id);
++
++    // Load one lazy adapter outside the task LRU and keep it resident until
++    // the context is destroyed. The adapter retains its existing external ID.
++    LLAMA_API int32_t llama_lora_adapter_load_resident(
++        struct llama_context* ctx,
++        int32_t adapter_id);
++
++    LLAMA_API bool llama_lora_adapter_is_resident(
++        struct llama_context* ctx,
++        int32_t adapter_id);
++
+     LLAMA_API int32_t llama_lazy_lora_adapter_register(
+         struct llama_context* ctx,
+         struct llama_lazy_lora_adapter_container* lazy_lora_adapter);
+@@ -577,6 +665,71 @@ extern "C" {
+         struct llama_context* ctx,
+         int32_t adapter_id);
+ 
++    // Materialize a lazy adapter from a complete, privately owned GGUF image.
++    // The caller must keep staged_data alive until this synchronous call returns.
++    // Publication into the LRU happens only after all allocation/copy operations
++    // complete successfully.
++    LLAMA_API int32_t llama_lazy_load_lora_adapter_prepared(
++        struct llama_context* ctx,
++        int32_t adapter_id,
++        const uint8_t * staged_data,
++        size_t staged_size);
++
++    // --- backend-async loading: reserve (owner) / load (loader) / publish (owner) ---
++    //
++    // The owner thread is the one that runs llama_decode. Only it may call
++    // reserve/publish/acquire/release; a loader thread may call
++    // llama_lora_reservation_load on a reservation it was handed and nothing
++    // else. All owner-side calls take lora_cache_mutex internally.
++
++    // Reserve a pool object for a lazy adapter that is neither published nor
++    // reserved. Returns 0 on success, 1 when every published entry is pinned
++    // (retry after a release), -1 on a hard error (bad ID, resident, already
++    // published/reserved). `evicted_id` is the victim ID or -1.
++    LLAMA_API int32_t llama_lazy_lora_adapter_reserve(
++        struct llama_context* ctx,
++        int32_t adapter_id,
++        struct llama_lora_reservation & out,
++        int32_t & evicted_id,
++        std::string & error);
++
++    // Load the GGUF at `path_lora` into the reserved object. Safe to call from
++    // a loader thread: it touches only the reserved object and read-only model
++    // tensors. Returns 0 on success, -1 on failure (object left cleared).
++    LLAMA_API int32_t llama_lora_reservation_load(
++        struct llama_model * model,
++        const char * path_lora,
++        struct llama_lora_reservation & reservation,
++        std::string & error);
++
++    // Publish a completed reservation. success=true makes the adapter READY
++    // with ref_count 0 (acquire it afterwards with llama_lazy_load_lora_adapter);
++    // success=false returns the object to the pool. A reservation whose
++    // generation no longer matches the container is treated as failed.
++    // Returns 0 when published, 1 when returned to the pool, -1 when the
++    // reservation was empty.
++    LLAMA_API int32_t llama_lazy_lora_adapter_publish(
++        struct llama_context* ctx,
++        struct llama_lora_reservation & reservation,
++        bool success);
++
++    // Snapshot of one container for introspection. Returns false on bad ID.
++    LLAMA_API bool llama_lazy_lora_adapter_status(
++        struct llama_context* ctx,
++        int32_t adapter_id,
++        int32_t * state,
++        uint32_t * ref_count,
++        uint64_t * generation,
++        bool * cached,
++        bool * resident);
++
++    // LRU occupancy: published entries, outstanding reservations, capacity.
++    LLAMA_API void llama_lora_cache_stats(
++        struct llama_context* ctx,
++        size_t * n_published,
++        size_t * n_reserved,
++        size_t * capacity);
++
+     // Remove a specific LoRA adapter from given context
+     // Return -1 if the adapter is not present in the context
+     LLAMA_API int32_t llama_lora_adapter_remove(
+@@ -933,6 +1086,9 @@ extern "C" {
+     // returns NULL for invalid ids.
+     LLAMA_API float * llama_get_embeddings_ith(struct llama_context * ctx, int32_t i);
+ 
++    // Final result_norm hidden state for an output token requested via batch.logits.
++    LLAMA_API float * llama_get_hidden_ith(struct llama_context * ctx, int32_t i);
++
+     // Get the embeddings for a sequence id
+     // Returns NULL if pooling_type is LLAMA_POOLING_TYPE_NONE
+     // shape: [n_embd] (1-dimensional)
+diff --git a/edgelora/src/llama-lora-output-map.h b/edgelora/src/llama-lora-output-map.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..f01b7d78c6126eb055a7acabe9229f4b9726f6f4
+--- /dev/null
++++ b/edgelora/src/llama-lora-output-map.h
+@@ -0,0 +1,34 @@
++#pragma once
++
++#include <cstdint>
++#include <stdexcept>
++#include <vector>
++
++// Mirror llama_set_inputs' inp_out_ids selection. The output matrix columns
++// and their adapter IDs must undergo exactly the same row selection.
++inline std::vector<int32_t> llama_lora_select_output_adapter_ids(
++        const std::vector<int32_t> & input_ids,
++        const int8_t * output_mask,
++        size_t n_outputs) {
++    if (n_outputs > input_ids.size()) {
++        throw std::invalid_argument("LoRA output count exceeds input count");
++    }
++    if (n_outputs == input_ids.size()) {
++        return input_ids; // includes all-output graph reservation
++    }
++    std::vector<int32_t> result;
++    result.reserve(n_outputs);
++    if (output_mask != nullptr) {
++        for (size_t i = 0; i < input_ids.size(); ++i) {
++            if (output_mask[i]) {
++                result.push_back(input_ids[i]);
++            }
++        }
++    } else if (n_outputs == 1) {
++        result.push_back(input_ids.back());
++    }
++    if (result.size() != n_outputs) {
++        throw std::invalid_argument("LoRA output mask/count mismatch");
++    }
++    return result;
++}
+diff --git a/edgelora/src/llama.cpp b/edgelora/src/llama.cpp
+index 52bedee82818fb6eafc13f4a3ce5af0ba59b6c1d..f92073459f04011b6d43c05c2b5f8b9ba9d33ae1 100644
+--- a/edgelora/src/llama.cpp
++++ b/edgelora/src/llama.cpp
+@@ -1,6 +1,7 @@
+ #include "llama-impl.h"
+ #include "llama-vocab.h"
+ #include "llama-sampling.h"
++#include "llama-lora-output-map.h"
+ 
+ #include "unicode.h"
+ 
+@@ -3207,6 +3208,31 @@ struct llama_context {
+         , t_load_us(model.t_load_us) {}
+ 
+     ~llama_context() {
++        // LoRA buffers must be released while their backends and base model
++        // are still alive. The lazy containers are owned by this context.
++        delete lora_cache;
++        lora_cache = nullptr;
++        if (resident_lora_adapter != nullptr) {
++            LLAMA_LOG_INFO("%s: releasing resident adapter %d\n",
++                    __func__, resident_lora_adapter_id);
++            if (resident_lora_adapter_id >= 0 &&
++                static_cast<size_t>(resident_lora_adapter_id) < lazy_load_lora_adapters.size()) {
++                auto * container = lazy_load_lora_adapters[resident_lora_adapter_id];
++                if (container != nullptr && container->adapter == resident_lora_adapter) {
++                    container->adapter = nullptr;
++                    container->loaded = false;
++                    container->ref_count = 0;
++                }
++            }
++            llama_lora_adapter_free(resident_lora_adapter);
++            resident_lora_adapter = nullptr;
++            resident_lora_adapter_id = -1;
++        }
++        for (auto * container : lazy_load_lora_adapters) {
++            delete container;
++        }
++        lazy_load_lora_adapters.clear();
++
+         ggml_backend_sched_free(sched);
+ 
+         for (ggml_backend_t backend : backends) {
+@@ -3230,6 +3256,11 @@ struct llama_context {
+     std::vector<int32_t> adapter_ids;
+     bool batch_lora = false;
+     LlamaLoraLRUCache* lora_cache = nullptr;
++    int32_t resident_lora_adapter_id = -1;
++    struct llama_lora_adapter * resident_lora_adapter = nullptr;
++    // Protects lazy container state, reference counts, and all LRU state.
++    // Adapter loading is synchronous, so it is deliberately serialized.
++    std::mutex lora_cache_mutex;
+ 
+     std::vector<ggml_backend_t> backends;
+ #ifdef GGML_USE_METAL
+@@ -3273,6 +3304,8 @@ struct llama_context {
+     // populated only when pooling_type == LLAMA_POOLING_TYPE_NONE
+     size_t  embd_size = 0; // capacity (of floats) for embeddings
+     float * embd      = nullptr;
++    size_t  hidden_size = 0; // capacity (of floats) for result_norm outputs
++    float * hidden      = nullptr;
+ 
+     // sequence embeddings output (map of [n_embd] vectors)
+     // populated only when pooling_type != LLAMA_POOLING_TYPE_NONE
+@@ -8807,6 +8840,127 @@ static void llm_build_kv_store(
+     ggml_build_forward_expand(graph, ggml_cpy(ctx, v_cur, v_cache_view));
+ }
+ 
++// Build ACC nodes out of place, then opt in to aliasing only after the complete
++// graph has exposed every consumer of each pre-update value.
++struct llm_lora_acc_candidate {
++    ggml_tensor * before;
++    ggml_tensor * delta;
++    ggml_tensor * after;
++};
++
++static thread_local std::vector<llm_lora_acc_candidate> llm_lora_acc_candidates;
++
++static bool llm_lora_acc_auto_enabled() {
++    static const bool enabled = []() {
++        const char * value = getenv("EDGELORA_ACC_AUTO");
++        return value != nullptr && strcmp(value, "1") == 0;
++    }();
++    return enabled;
++}
++
++// Fail closed: one unsafe or unrecognized candidate leaves the entire graph
++// in its original, out-of-place form. This runs before scheduler allocation.
++static bool llm_lora_acc_try_inplace(ggml_cgraph * graph) {
++    if (!llm_lora_acc_auto_enabled() || llm_lora_acc_candidates.empty()) {
++        return false;
++    }
++    static const bool trace = []() {
++        const char * value = getenv("EDGELORA_ACC_AUTO_TRACE");
++        return value != nullptr && strcmp(value, "1") == 0;
++    }();
++    auto reject = [&](const char * reason) {
++        if (trace) {
++            fprintf(stderr, "ACC_AUTO fallback: %s (%zu candidates)\n",
++                    reason, llm_lora_acc_candidates.size());
++        }
++        return false;
++    };
++    const char * force_fallback = getenv("EDGELORA_ACC_AUTO_FORCE_FALLBACK");
++    if (force_fallback != nullptr && strcmp(force_fallback, "1") == 0) {
++        return reject("forced fallback diagnostic");
++    }
++
++    std::unordered_set<ggml_tensor *> nodes;
++    std::unordered_set<ggml_tensor *> viewed;
++    std::unordered_map<ggml_tensor *, ggml_tensor *> sole_reader;
++    std::unordered_set<ggml_tensor *> multiply_read;
++    for (int i = 0; i < graph->n_nodes; ++i) {
++        auto * node = graph->nodes[i];
++        nodes.insert(node);
++        if (node->view_src) {
++            viewed.insert(node->view_src);
++        }
++        for (auto * src : node->src) {
++            if (!src) {
++                continue;
++            }
++            if (!sole_reader.emplace(src, node).second) {
++                multiply_read.insert(src);
++            }
++        }
++    }
++    for (int i = 0; i < graph->n_leafs; ++i) {
++        if (graph->leafs[i]->view_src) {
++            viewed.insert(graph->leafs[i]->view_src);
++        }
++    }
++
++    std::unordered_set<ggml_tensor *> candidate_outputs;
++    for (const auto & candidate : llm_lora_acc_candidates) {
++        candidate_outputs.insert(candidate.after);
++    }
++
++    for (const auto & candidate : llm_lora_acc_candidates) {
++        auto * before = candidate.before;
++        auto * after  = candidate.after;
++        int32_t params[5];
++        memcpy(params, after->op_params, sizeof(params));
++        if (!nodes.count(before) || !nodes.count(after) ||
++            after->op != GGML_OP_ACC || after->src[0] != before ||
++            after->src[1] != candidate.delta ||
++            after->view_src != nullptr || after->data != nullptr ||
++            after->buffer != nullptr || after->grad != nullptr ||
++            after->flags != 0 || params[4] != 0 ||
++            before->view_src != nullptr || before->data != nullptr ||
++            before->buffer != nullptr || before->grad != nullptr ||
++            before->flags != 0 || before->type != GGML_TYPE_F32 ||
++            after->type != GGML_TYPE_F32 ||
++            !ggml_is_contiguous(before) || !ggml_is_contiguous(after) ||
++            ggml_nbytes(before) != ggml_nbytes(after) ||
++            viewed.count(before) || multiply_read.count(before) ||
++            sole_reader[before] != after) {
++            return reject("shape, ownership, or liveness check");
++        }
++
++        // A fresh matmul result, or the previous candidate in the same chain.
++        if (before->op != GGML_OP_MUL_MAT) {
++            if (!candidate_outputs.count(before)) {
++                return reject("unrecognized predecessor");
++            }
++        }
++    }
++
++    // All candidates passed. They form a chain, so convert in build order.
++    for (const auto & candidate : llm_lora_acc_candidates) {
++        auto * before = candidate.before;
++        auto * after = candidate.after;
++        auto * storage = before->view_src ? before->view_src : before;
++        after->view_src = storage;
++        after->view_offs = before->view_offs;
++        after->data = before->data;
++        after->buffer = before->buffer;
++        int32_t params[5];
++        memcpy(params, after->op_params, sizeof(params));
++        params[4] = 1;
++        memcpy(after->op_params, params, sizeof(params));
++    }
++    if (trace) {
++        fprintf(stderr, "ACC_AUTO inplace: %zu candidates\n",
++                llm_lora_acc_candidates.size());
++    }
++    return true;
++}
++
+ // do mat_mul, while optionally apply lora
+ static struct ggml_tensor *llm_build_lora_mm(struct llama_context &lctx,
+                                              struct ggml_context *ctx0,
+@@ -8815,8 +8969,13 @@ static struct ggml_tensor *llm_build_lora_mm(struct llama_context &lctx,
+     // cur is a 2D tensor with shape [n_embd, n_batch]
+     // w is a 2D tensor with shape [n_embd, n_embd]
+     struct ggml_tensor *res = ggml_mul_mat(ctx0, w, cur);
++    // Opt-in ACC-only experiment: keep per-token matrix products and ordering.
++    static const bool acc_slice = []() {
++        const char * value = getenv("EDGELORA_ACC_SLICE");
++        return value != nullptr && strcmp(value, "1") == 0;
++    }();
+     int n = cur->ne[1];  // Assuming ne[1] represents batch size
+-    if (lctx.batch_lora && lctx.adapter_ids.size() == n) {
++    if (lctx.batch_lora) {
+         // Assuming cur has batch size n, and lctx.adapter_ids contains n
+         // indices
+ 
+@@ -8864,8 +9023,12 @@ static struct ggml_tensor *llm_build_lora_mm(struct llama_context &lctx,
+ 
+         std::unordered_map<int, std::vector<int>> adapter_groups;
+         for (int i = 0; i < n; i++) {
++            if (static_cast<size_t>(i) >= lctx.adapter_ids.size()) {
++                continue;
++            }
+             int adapter_id = lctx.adapter_ids[i];
+-            if (adapter_id > 0) {
++            if (adapter_id >= 0 &&
++                static_cast<size_t>(adapter_id) < lctx.lazy_load_lora_adapters.size()) {
+                 adapter_groups[adapter_id].push_back(i);
+             }
+         }
+@@ -8875,61 +9038,100 @@ static struct ggml_tensor *llm_build_lora_mm(struct llama_context &lctx,
+             int adapter_id = group.first;
+             const auto &sample_indices = group.second;
+ 
+-            if (!lctx.lazy_load_lora_adapters[adapter_id]->loaded) {
++            auto * container = lctx.lazy_load_lora_adapters[adapter_id];
++            if (container == nullptr || !container->loaded || container->adapter == nullptr) {
+                 continue;
+             }
+ 
+-            auto &lora_adapter =
+-                lctx.lazy_load_lora_adapters[adapter_id]->adapter;
++            auto &lora_adapter = container->adapter;
+             struct llama_lora_weight *lora = lora_adapter->get_weight(w);
+ 
+             if (lora == nullptr) {
+                 continue;
+             }
+ 
+-            // Create a view for this group's samples
+-            struct ggml_tensor *cur_group = ggml_new_tensor_2d(
+-                ctx0, cur->type, cur->ne[0], sample_indices.size());
++            const float alpha = lora_adapter->alpha;
++            const float rank = static_cast<float>(lora->b->ne[0]);
++            if (rank <= 0.0f) {
++                LLAMA_LOG_ERROR("invalid LoRA rank for adapter %d\n", adapter_id);
++                continue;
++            }
++            const float scale = alpha ? alpha / rank : 1.0f;
+ 
+-            // Copy relevant samples to the group tensor
+-            for (size_t i = 0; i < sample_indices.size(); i++) {
+-                int idx = sample_indices[i];
+-                struct ggml_tensor *src =
+-                    ggml_view_1d(ctx0, cur, cur->ne[0], idx * cur->nb[1]);
+-                struct ggml_tensor *dst = ggml_view_1d(
+-                    ctx0, cur_group, cur_group->ne[0], i * cur_group->nb[1]);
+-                ggml_cpy(ctx0, src, dst);
++            if (strcmp(w->name, "blk.0.attn_q.weight") == 0) {
++                LLAMA_LOG_INFO("Applying LoRA adapter %d to %zu batch samples\n",
++                               adapter_id, sample_indices.size());
+             }
+ 
+-            // Apply LoRA adapter to the group
+-            struct ggml_tensor *ab_cur_group = ggml_mul_mat(
+-                ctx0, lora->b, ggml_mul_mat(ctx0, lora->a, cur_group));
++            // Keep each sample's LoRA update in the dependency chain rooted at res.
++            // This favors correctness over grouping the matrix multiplications.
++            for (int idx : sample_indices) {
++                if (idx < 0 || idx >= cur->ne[1] || idx >= res->ne[1]) {
++                    LLAMA_LOG_ERROR("invalid LoRA sample index %d for cur/res batch sizes %" PRId64 "/%" PRId64 "\n",
++                            idx, cur->ne[1], res->ne[1]);
++                    continue;
++                }
++
++                const size_t cur_offset = static_cast<size_t>(idx) * cur->nb[1];
++                if (cur->nb[1] == 0 || cur_offset / cur->nb[1] != static_cast<size_t>(idx) ||
++                    cur_offset > ggml_nbytes(cur) || cur->nb[1] > ggml_nbytes(cur) - cur_offset) {
++                    LLAMA_LOG_ERROR("invalid LoRA input offset for sample %d\n", idx);
++                    continue;
++                }
++
++                struct ggml_tensor * cur_sample = ggml_view_1d(
++                        ctx0, cur, cur->ne[0], cur_offset);
++                struct ggml_tensor * ab_cur = ggml_mul_mat(
++                        ctx0, lora->b, ggml_mul_mat(ctx0, lora->a, cur_sample));
++                ab_cur = ggml_scale(ctx0, ab_cur, scale);
++
++                if (ab_cur->ne[0] != res->ne[0] || ggml_nelements(ab_cur) != res->ne[0]) {
++                    LLAMA_LOG_ERROR("invalid LoRA output shape for adapter %d sample %d\n", adapter_id, idx);
++                    continue;
++                }
++
++                const size_t res_offset = static_cast<size_t>(idx) * res->nb[1];
++                if (res->nb[1] == 0 || res_offset / res->nb[1] != static_cast<size_t>(idx) ||
++                    res_offset > ggml_nbytes(res) || ggml_nbytes(ab_cur) > ggml_nbytes(res) - res_offset) {
++                    LLAMA_LOG_ERROR("invalid LoRA output offset for sample %d\n", idx);
++                    continue;
++                }
+ 
+-            // Add results back to res tensor
+-            for (size_t i = 0; i < sample_indices.size(); i++) {
+-                int idx = sample_indices[i];
+-                struct ggml_tensor *src =
+-                    ggml_view_1d(ctx0, ab_cur_group, ab_cur_group->ne[0],
+-                                 i * ab_cur_group->nb[1]);
+-                struct ggml_tensor *dst =
+-                    ggml_view_1d(ctx0, res, res->ne[0], idx * res->nb[1]);
+-                dst = ggml_acc(ctx0, dst, src,
+-                               dst->nb[1],  // stride for dim 1
+-                               dst->nb[2],  // stride for dim 2
+-                               dst->nb[3],  // stride for dim 3
+-                               0);          // offset
++                auto * before_acc = res;
++                res = acc_slice && !llm_lora_acc_auto_enabled()
++                    ? ggml_acc_inplace(ctx0, res, ab_cur,
++                        res->nb[1], res->nb[2], res->nb[3], res_offset)
++                    : ggml_acc(ctx0, res, ab_cur,
++                        res->nb[1], res->nb[2], res->nb[3], res_offset);
++                if (llm_lora_acc_auto_enabled()) {
++                    llm_lora_acc_candidates.push_back({before_acc, ab_cur, res});
++                }
+             }
+         }
+ 
+-    } else if (lctx.adapter_id > 0) {
++    } else if (lctx.adapter_id >= 0) {
+         // LLAMA_LOG_INFO("llm_build_lora_mm: using lora adapter %d\n",
+         // lctx.adapter_id);
+-        auto &lora_adapter =
+-            lctx.lazy_load_lora_adapters[lctx.adapter_id]->adapter;
++        if (static_cast<size_t>(lctx.adapter_id) >= lctx.lazy_load_lora_adapters.size()) {
++            return res;
++        }
++        auto * container = lctx.lazy_load_lora_adapters[lctx.adapter_id];
++        if (container == nullptr || !container->loaded || container->adapter == nullptr) {
++            return res;
++        }
++        auto &lora_adapter = container->adapter;
+         struct llama_lora_weight *lora = lora_adapter->get_weight(w);
+         if (lora != nullptr) {
++            const float alpha = lora_adapter->alpha;
++            const float rank = static_cast<float>(lora->b->ne[0]);
++            if (rank <= 0.0f) {
++                LLAMA_LOG_ERROR("invalid LoRA rank for adapter %d\n", lctx.adapter_id);
++                return res;
++            }
++            const float scale = alpha ? alpha / rank : 1.0f;
+             struct ggml_tensor *ab_cur =
+                 ggml_mul_mat(ctx0, lora->b, ggml_mul_mat(ctx0, lora->a, cur));
++            ab_cur = ggml_scale(ctx0, ab_cur, scale);
+             res = ggml_add(ctx0, res, ab_cur);
+         }
+     } else {
+@@ -10215,6 +10417,13 @@ struct llm_build_context {
+                 n_tokens = n_outputs;
+                 cur   = ggml_get_rows(ctx0,   cur, inp_out_ids);
+                 inpSA = ggml_get_rows(ctx0, inpSA, inp_out_ids);
++                // Llama's final FFN and output head consume the selected rows.
++                // Keep per-token LoRA IDs aligned with that same selection.
++                if (lctx.batch_lora && n_outputs != batch.n_tokens) {
++                    GGML_ASSERT(lctx.adapter_ids.size() == batch.n_tokens);
++                    lctx.adapter_ids = llama_lora_select_output_adapter_ids(
++                            lctx.adapter_ids, batch.output, n_outputs);
++                }
+             }
+ 
+             struct ggml_tensor * ffn_inp = ggml_add(ctx0, cur, inpSA);
+@@ -15419,6 +15628,7 @@ static struct ggml_cgraph * llama_build_graph(
+          llama_context & lctx,
+     const llama_ubatch & batch,
+                   bool   worst_case) {
++    llm_lora_acc_candidates.clear();
+     const auto & model = lctx.model;
+ 
+     // this callback allows us to apply custom logic to each tensor (e.g. ggml-alloc, offloading, etc.)
+@@ -16113,9 +16323,11 @@ static size_t llama_output_reserve(llama_context & lctx, size_t n_outputs) {
+     // TODO: use a per-batch flag for logits presence instead
+     const bool has_logits = !cparams.embeddings;
+     const bool has_embd   =  cparams.embeddings && (cparams.pooling_type == LLAMA_POOLING_TYPE_NONE);
++    const bool has_hidden = !cparams.embeddings;
+ 
+     const size_t logits_size = has_logits ? n_vocab*n_outputs_max : 0;
+     const size_t embd_size   = has_embd   ?  n_embd*n_outputs_max : 0;
++    const size_t hidden_size = has_hidden ? n_embd*n_outputs_max : 0;
+ 
+     if (lctx.output_ids.empty()) {
+         // init, never resized afterwards
+@@ -16123,7 +16335,7 @@ static size_t llama_output_reserve(llama_context & lctx, size_t n_outputs) {
+     }
+ 
+     const size_t prev_size = lctx.buf_output ? ggml_backend_buffer_get_size(lctx.buf_output) : 0;
+-    const size_t new_size  = (logits_size + embd_size) * sizeof(float);
++    const size_t new_size  = (logits_size + embd_size + hidden_size) * sizeof(float);
+ 
+     // alloc only when more than the current capacity is required
+     // TODO: also consider shrinking the buffer
+@@ -16137,6 +16349,7 @@ static size_t llama_output_reserve(llama_context & lctx, size_t n_outputs) {
+             lctx.buf_output = nullptr;
+             lctx.logits = nullptr;
+             lctx.embd = nullptr;
++            lctx.hidden = nullptr;
+         }
+ 
+         lctx.buf_output = ggml_backend_buft_alloc_buffer(llama_default_buffer_type_cpu(true), new_size);
+@@ -16150,10 +16363,12 @@ static size_t llama_output_reserve(llama_context & lctx, size_t n_outputs) {
+ 
+     lctx.logits = has_logits ? output_base               : nullptr;
+     lctx.embd   = has_embd   ? output_base + logits_size : nullptr;
++    lctx.hidden = has_hidden ? output_base + logits_size + embd_size : nullptr;
+ 
+     lctx.output_size = n_outputs_max;
+     lctx.logits_size = logits_size;
+     lctx.embd_size   = embd_size;
++    lctx.hidden_size = hidden_size;
+ 
+     // set all ids as invalid (negative)
+     std::fill(lctx.output_ids.begin(), lctx.output_ids.end(), -1);
+@@ -16194,6 +16409,11 @@ static void llama_output_reorder(struct llama_context * ctx) {
+                     std::swap(ctx->embd[i*n_embd + k], ctx->embd[j_min*n_embd + k]);
+                 }
+             }
++            if (ctx->hidden_size > 0) {
++                for (uint32_t k = 0; k < n_embd; k++) {
++                    std::swap(ctx->hidden[i*n_embd + k], ctx->hidden[j_min*n_embd + k]);
++                }
++            }
+         }
+         std::fill(ctx->output_ids.begin(), ctx->output_ids.end(), -1);
+         for (int32_t i = 0; i < n_outputs; ++i) {
+@@ -16380,9 +16600,12 @@ static int llama_decode_internal(
+ 
+         ggml_cgraph * gf = llama_build_graph(lctx, ubatch, false);
+ 
++        llm_lora_acc_try_inplace(gf);
++
+         // the output is always the last tensor in the graph
+         struct ggml_tensor * res  = gf->nodes[gf->n_nodes - 1];
+         struct ggml_tensor * embd = gf->nodes[gf->n_nodes - 2];
++        struct ggml_tensor * hidden = nullptr;
+ 
+         if (lctx.n_outputs == 0) {
+             // no output
+@@ -16401,6 +16624,14 @@ static int llama_decode_internal(
+         } else {
+             embd = nullptr; // do not extract embeddings when not needed
+             GGML_ASSERT(strcmp(res->name, "result_output") == 0 && "missing result_output tensor");
++            for (int node = gf->n_nodes - 2; node >= 0; --node) {
++                if (strcmp(gf->nodes[node]->name, "result_norm") == 0) {
++                    hidden = gf->nodes[node];
++                    break;
++                }
++            }
++            GGML_ASSERT(hidden != nullptr && "missing result_norm tensor");
++            GGML_ASSERT(hidden->ne[0] == n_embd && "result_norm must have n_embd columns");
+         }
+         // LLAMA_LOG_INFO("graph build time: %.3f ms (%d nodes, %d leafs)\n", (ggml_time_us() - t_start_us)/1000.0, gf->n_nodes, gf->n_leafs);
+ 
+@@ -16441,6 +16672,20 @@ static int llama_decode_internal(
+             }
+         }
+ 
++        if (hidden) {
++            ggml_backend_t backend_hidden = ggml_backend_sched_get_tensor_backend(lctx.sched, hidden);
++            GGML_ASSERT(backend_hidden != nullptr);
++            GGML_ASSERT(lctx.hidden != nullptr);
++            const int32_t n_outputs_new = lctx.n_outputs;
++            if (n_outputs_new) {
++                GGML_ASSERT(n_outputs_prev + n_outputs_new <= n_outputs);
++                GGML_ASSERT((n_outputs_prev + n_outputs_new)*n_embd <= (int64_t) lctx.hidden_size);
++                ggml_backend_tensor_get_async(backend_hidden, hidden,
++                        lctx.hidden + n_outputs_prev*n_embd, 0,
++                        n_outputs_new*n_embd*sizeof(float));
++            }
++        }
++
+         // extract embeddings
+         if (embd) {
+             ggml_backend_t backend_embd = ggml_backend_sched_get_tensor_backend(lctx.sched, embd);
+@@ -16602,6 +16847,8 @@ static int llama_encode_internal(
+ 
+     ggml_cgraph * gf = llama_build_graph(lctx, ubatch, false);
+ 
++    llm_lora_acc_try_inplace(gf);
++
+     // the output embeddings after the final encoder normalization
+     struct ggml_tensor * embd = nullptr;
+ 
+@@ -17851,7 +18098,29 @@ static void llama_model_quantize_internal(const std::string & fname_inp, const s
+     }
+ }
+ 
+-static void llama_lora_adapter_init_internal(struct llama_model * model, const char * path_lora, struct llama_lora_adapter & adapter) {
++struct repeated_miss_load_span {
++    int64_t start; const char *path;
++    repeated_miss_load_span(const char *p):start(ggml_time_us()),path(p) {}
++    ~repeated_miss_load_span() {
++        const int64_t end=ggml_time_us();
++        fprintf(stderr,"{\"rm_event\":\"loader\",\"start_us\":%lld,\"end_us\":%lld,\"path\":\"%s\"}\n",(long long)start,(long long)end,path);
++    }
++};
++static void llama_lora_adapter_init_internal(
++        struct llama_model * model,
++        const char * path_lora,
++        struct llama_lora_adapter & adapter,
++        const uint8_t * staged_data = nullptr,
++        size_t staged_size = 0) {
++    repeated_miss_load_span rm_load(path_lora);
++    const int64_t timing_begin = ggml_time_us();
++    int64_t timing_mark = timing_begin;
++    auto timing_phase = [&](const char * phase) {
++        const int64_t now = ggml_time_us();
++        LLAMA_LOG_INFO("STAGE_TIMING phase=%s start_us=%lld end_us=%lld duration_us=%lld staged=%d path=%s\n",
++                phase, (long long)timing_mark, (long long)now, (long long)(now-timing_mark), staged_data != nullptr, path_lora);
++        timing_mark = ggml_time_us();
++    };
+     LLAMA_LOG_INFO("%s: loading lora adapter from '%s' ...\n", __func__, path_lora);
+ 
+     ggml_context * ctx = nullptr;
+@@ -17863,6 +18132,11 @@ static void llama_lora_adapter_init_internal(struct llama_model * model, const c
+     if (!ctx_gguf) {
+         throw std::runtime_error("failed to load lora adapter file from " + std::string(path_lora));
+     }
++    // both transient contexts must be released on every throw path below; the
++    // async loader turns a bad adapter file into a per-request event, so a leak
++    // here would accumulate across misses
++    std::unique_ptr<gguf_context, decltype(&gguf_free)> ctx_gguf_guard(ctx_gguf, &gguf_free);
++    std::unique_ptr<ggml_context, decltype(&ggml_free)> ctx_meta_guard(ctx, &ggml_free);
+ 
+     // check metadata
+     {
+@@ -17878,26 +18152,24 @@ static void llama_lora_adapter_init_internal(struct llama_model * model, const c
+ 
+         auto general_type = get_kv_str(llm_kv(LLM_KV_GENERAL_TYPE));
+         if (general_type != "adapter") {
+-            gguf_free(ctx_gguf);
+             throw std::runtime_error("expect general.type to be 'adapter', but got: " + general_type);
+         }
+ 
+         auto general_arch_str = get_kv_str(llm_kv(LLM_KV_GENERAL_ARCHITECTURE));
+         auto general_arch = llm_arch_from_string(general_arch_str);
+         if (general_arch != model->arch) {
+-            gguf_free(ctx_gguf);
+             throw std::runtime_error("model arch and LoRA arch mismatch");
+         }
+ 
+         auto adapter_type = get_kv_str(llm_kv(LLM_KV_ADAPTER_TYPE));
+         if (adapter_type != "lora") {
+-            gguf_free(ctx_gguf);
+             throw std::runtime_error("expect adapter.type to be 'lora', but got: " + adapter_type);
+         }
+ 
+         adapter.alpha = get_kv_f32(llm_kv(LLM_KV_ADAPTER_LORA_ALPHA));
+     }
+ 
++    timing_phase("gguf_metadata");
+     int n_tensors = gguf_get_n_tensors(ctx_gguf);
+ 
+     // contexts for each buffer type
+@@ -17913,6 +18185,9 @@ static void llama_lora_adapter_init_internal(struct llama_model * model, const c
+             };
+             ggml_context * buft_ctx = ggml_init(params);
+             ctx_map[buft] = buft_ctx;
++            // owned by the adapter from this point so clear() frees it if a
++            // later check or the buffer allocation throws
++            adapter.ctxs.push_back(buft_ctx);
+             return buft_ctx;
+         };
+         return it->second;
+@@ -17940,8 +18215,6 @@ static void llama_lora_adapter_init_internal(struct llama_model * model, const c
+                 ab_map[name].b = cur;
+             }
+         } else {
+-            gguf_free(ctx_gguf);
+-            ggml_free(ctx);
+             throw std::runtime_error("LoRA tensor '" + name + "' has unexpected suffix");
+         }
+     }
+@@ -17952,28 +18225,20 @@ static void llama_lora_adapter_init_internal(struct llama_model * model, const c
+         llama_lora_weight & w = it.second;
+ 
+         if (!w.a || !w.b) {
+-            gguf_free(ctx_gguf);
+-            ggml_free(ctx);
+             throw std::runtime_error("LoRA tensor pair for '" + name + "' is missing one component");
+         }
+ 
+         // device buft and device ctx
+         auto * model_tensor = llama_get_model_tensor(model, name.c_str());
+         if (!model_tensor) {
+-            gguf_free(ctx_gguf);
+-            ggml_free(ctx);
+             throw std::runtime_error("LoRA tensor '" + name + "' does not exist in base model");
+         }
+         struct ggml_context * dev_ctx = get_ctx_for_buft(ggml_backend_buffer_get_type(model_tensor->buffer));
+         // validate tensor shape
+         if (model_tensor->ne[0] != w.a->ne[0] || model_tensor->ne[1] != w.b->ne[1]) {
+-            gguf_free(ctx_gguf);
+-            ggml_free(ctx);
+             throw std::runtime_error("tensor '" + name + "' has incorrect shape");
+         }
+         if (w.a->ne[1] != w.b->ne[0]) {
+-            gguf_free(ctx_gguf);
+-            ggml_free(ctx);
+             throw std::runtime_error("lora_a tensor is not transposed (hint: adapter from \"finetune\" example is no longer supported)");
+         }
+         // save tensor to adapter
+@@ -17984,6 +18249,7 @@ static void llama_lora_adapter_init_internal(struct llama_model * model, const c
+         adapter.ab_map[name] = llama_lora_weight(tensor_a, tensor_b);
+     }
+ 
++    timing_phase("tensor_context_create");
+     // allocate tensors / buffers and zero
+     {
+         adapter.ctxs.reserve(ctx_map.size());
+@@ -17994,27 +18260,44 @@ static void llama_lora_adapter_init_internal(struct llama_model * model, const c
+             ggml_context * ctx_dev = it.second;
+             ggml_backend_buffer_t buf = ggml_backend_alloc_ctx_tensors_from_buft(ctx_dev, buft);
+             if (!buf) {
+-                gguf_free(ctx_gguf);
+-                ggml_free(ctx);
+                 throw std::runtime_error("failed to allocate buffer for lora adapter\n");
+             }
+             LLAMA_LOG_INFO("%s: %10s LoRA buffer size = %8.2f MiB\n", __func__, ggml_backend_buffer_name(buf), ggml_backend_buffer_get_size(buf)/1024.0/1024.0);
+-            adapter.ctxs.push_back(ctx_dev);
+             adapter.bufs.push_back(buf);
+         }
+     }
+ 
++    timing_phase("backend_allocation");
++    int64_t timing_host_us = 0, timing_copy_us = 0;
++    size_t timing_bytes = 0, timing_count = 0;
+     // set tensor data
+     {
+-        llama_file gguf_file(path_lora, "rb");
++        std::unique_ptr<llama_file> gguf_file;
++        if (staged_data == nullptr) {
++            gguf_file.reset(new llama_file(path_lora, "rb"));
++        }
+         std::vector<uint8_t> read_buf;
+         auto set_tensor = [&](struct ggml_tensor * orig, struct ggml_tensor * dev) {
++            const int64_t host_begin = ggml_time_us();
+             size_t offs = gguf_get_data_offset(ctx_gguf) + gguf_get_tensor_offset(ctx_gguf, gguf_find_tensor(ctx_gguf, orig->name));
+             size_t size = ggml_nbytes(orig);
+             read_buf.resize(size);
+-            gguf_file.seek(offs, SEEK_SET);
+-            gguf_file.read_raw(read_buf.data(), size);
++            if (staged_data != nullptr) {
++                if (offs > staged_size || size > staged_size - offs) {
++                    throw std::runtime_error("staged LoRA image is truncated");
++                }
++                memcpy(read_buf.data(), staged_data + offs, size);
++            } else {
++                gguf_file->seek(offs, SEEK_SET);
++                gguf_file->read_raw(read_buf.data(), size);
++            }
++            const int64_t copy_begin = ggml_time_us();
+             ggml_backend_tensor_set(dev, read_buf.data(), 0, size);
++            const int64_t copy_end = ggml_time_us();
++            timing_host_us += copy_begin - host_begin;
++            timing_copy_us += copy_end - copy_begin;
++            timing_bytes += size;
++            timing_count++;
+         };
+         for (auto & it : adapter.ab_map) {
+             auto orig = ab_map[it.first];
+@@ -18024,11 +18307,15 @@ static void llama_lora_adapter_init_internal(struct llama_model * model, const c
+         }
+     }
+ 
++    timing_phase("tensor_transfer_total");
++    LLAMA_LOG_INFO("STAGE_TIMING_TRANSFER host_us=%lld backend_set_us=%lld bytes=%zu tensors=%zu staged=%d path=%s\n",
++            (long long)timing_host_us, (long long)timing_copy_us, timing_bytes, timing_count, staged_data != nullptr, path_lora);
+     LLAMA_LOG_INFO("%s: loaded %ld tensors from lora file\n", __func__, adapter.ab_map.size()*2);
+ 
+     // free ctx for reading gguf
+-    gguf_free(ctx_gguf);
+-    ggml_free(ctx);
++    ctx_gguf_guard.reset();
++    ctx_meta_guard.reset();
++    timing_phase("cleanup");
+ }
+ 
+ int32_t llama_lora_adapter_set(
+@@ -18079,21 +18366,38 @@ bool llama_batch_lora_clear(struct llama_context *ctx, int32_t n_parallel) {
+ }
+ 
+ 
++
+ void llama_lora_adapter_release(struct llama_context* ctx,
+                                 int32_t adapter_id) {
+-    if ((int32_t)ctx->lazy_load_lora_adapters.size() <= adapter_id) {
++    std::lock_guard<std::mutex> lock(ctx->lora_cache_mutex);
++    if (adapter_id < 0 ||
++        static_cast<size_t>(adapter_id) >= ctx->lazy_load_lora_adapters.size()) {
+         LLAMA_LOG_ERROR("%s: adapter index %d out of range\n", __func__, adapter_id);
+         return;
+     }
++    if (adapter_id == ctx->resident_lora_adapter_id) {
++        LLAMA_LOG_ERROR("%s: resident adapter %d does not participate in task acquire/release\n",
++                __func__, adapter_id);
++        return;
++    }
+     auto* lazy_lora_adapter = ctx->lazy_load_lora_adapters[adapter_id];
++    if (lazy_lora_adapter->ref_count == 0) {
++        LLAMA_LOG_ERROR("%s: adapter index %d already has reference count 0\n",
++                        __func__, adapter_id);
++        return;
++    }
++    const uint32_t ref_count_before = lazy_lora_adapter->ref_count;
+     lazy_lora_adapter->ref_count--;
+-    LLAMA_LOG_INFO("%s: release adapter index %d, reference count %d\n", __func__, adapter_id, lazy_lora_adapter->ref_count);
++    LLAMA_LOG_INFO("%s: release adapter index %d, reference count %u -> %u\n",
++                   __func__, adapter_id, ref_count_before, lazy_lora_adapter->ref_count);
+ }
+ 
+ 
+ bool llama_lora_adapter_loaded(struct llama_context* ctx,
+                                int32_t adapter_id){
+-    if ((int32_t)ctx->lazy_load_lora_adapters.size() <= adapter_id) {
++    std::lock_guard<std::mutex> lock(ctx->lora_cache_mutex);
++    if (adapter_id < 0 ||
++        static_cast<size_t>(adapter_id) >= ctx->lazy_load_lora_adapters.size()) {
+         LLAMA_LOG_ERROR("%s: adapter index %d out of range\n", __func__, adapter_id);
+         return false;
+     }
+@@ -18106,44 +18410,285 @@ bool llama_lora_adapter_loaded(struct llama_context* ctx,
+     return lazy_lora_adapter->loaded;
+ }
+ 
+-int32_t llama_lazy_load_lora_adapter(struct llama_context* ctx,
+-                                     int32_t adapter_id) {
+-    if ((int32_t)ctx->lazy_load_lora_adapters.size() <= adapter_id) {
++bool llama_lora_adapter_cached(struct llama_context* ctx, int32_t adapter_id) {
++    std::lock_guard<std::mutex> lock(ctx->lora_cache_mutex);
++    if (adapter_id < 0 || static_cast<size_t>(adapter_id) >= ctx->lazy_load_lora_adapters.size()) {
++        return false;
++    }
++    if (adapter_id == ctx->resident_lora_adapter_id) {
++        return false;
++    }
++    return ctx->lora_cache != nullptr && ctx->lora_cache->contains(static_cast<size_t>(adapter_id));
++}
++
++int32_t llama_lora_adapter_load_resident(struct llama_context* ctx, int32_t adapter_id) {
++    std::lock_guard<std::mutex> lock(ctx->lora_cache_mutex);
++    if (adapter_id < 0 || static_cast<size_t>(adapter_id) >= ctx->lazy_load_lora_adapters.size()) {
++        LLAMA_LOG_ERROR("%s: adapter index %d out of range\n", __func__, adapter_id);
++        return -1;
++    }
++    if (ctx->resident_lora_adapter != nullptr || ctx->resident_lora_adapter_id >= 0) {
++        LLAMA_LOG_ERROR("%s: resident adapter already configured with ID %d\n",
++                __func__, ctx->resident_lora_adapter_id);
++        return -1;
++    }
++
++    auto * container = ctx->lazy_load_lora_adapters[adapter_id];
++    if (container == nullptr || container->adapter != nullptr || container->loaded || container->ref_count != 0) {
++        LLAMA_LOG_ERROR("%s: adapter %d is not an unloaded lazy adapter\n", __func__, adapter_id);
++        return -1;
++    }
++
++    struct llama_lora_adapter * adapter = llama_lora_adapter_init(
++            &(ctx->model), container->path.c_str());
++    if (adapter == nullptr) {
++        LLAMA_LOG_ERROR("%s: failed to load resident adapter %d from '%s'\n",
++                __func__, adapter_id, container->path.c_str());
++        return -1;
++    }
++
++    ctx->resident_lora_adapter_id = adapter_id;
++    ctx->resident_lora_adapter = adapter;
++    container->adapter = adapter;
++    container->loaded = true;
++    container->ref_count = 0;
++    container->state = LLAMA_LAZY_LORA_READY;
++    LLAMA_LOG_INFO("%s: loaded resident adapter %d outside task LRU, reference count 0\n",
++            __func__, adapter_id);
++    return 0;
++}
++
++bool llama_lora_adapter_is_resident(struct llama_context* ctx, int32_t adapter_id) {
++    std::lock_guard<std::mutex> lock(ctx->lora_cache_mutex);
++    return adapter_id >= 0 && adapter_id == ctx->resident_lora_adapter_id &&
++            ctx->resident_lora_adapter != nullptr;
++}
++
++static int32_t llama_lazy_load_lora_adapter_internal(
++        struct llama_context * ctx,
++        int32_t adapter_id,
++        const uint8_t * staged_data,
++        size_t staged_size) {
++    const int64_t lock_begin = ggml_time_us();
++    std::lock_guard<std::mutex> lock(ctx->lora_cache_mutex);
++    LLAMA_LOG_INFO("STAGE_TIMING_LOCK adapter_id=%d duration_us=%lld\n", adapter_id, (long long)(ggml_time_us()-lock_begin));
++    if (adapter_id < 0 ||
++        static_cast<size_t>(adapter_id) >= ctx->lazy_load_lora_adapters.size()) {
+         LLAMA_LOG_ERROR("%s: adapter index %d out of range\n", __func__, adapter_id);
+         return -1;
+     }
++    if (adapter_id == ctx->resident_lora_adapter_id) {
++        LLAMA_LOG_ERROR("%s: resident adapter %d does not participate in task acquire/release\n",
++                __func__, adapter_id);
++        return -1;
++    }
+     auto* lazy_lora_adapter = ctx->lazy_load_lora_adapters[adapter_id];
+ 
++    if (lazy_lora_adapter->state == LLAMA_LAZY_LORA_LOADING) {
++        // A loader thread owns the pool object; the owner must wait for
++        // publish() instead of starting a second physical load.
++        LLAMA_LOG_ERROR("%s: adapter %d is being loaded asynchronously; acquire after publish\n",
++                        __func__, adapter_id);
++        return -1;
++    }
++
+     if (lazy_lora_adapter->ref_count > 0) {
+-        LLAMA_LOG_INFO("%s: adapter %d already loaded\n", __func__, adapter_id);
++        const uint32_t ref_count_before = lazy_lora_adapter->ref_count;
+         lazy_lora_adapter->ref_count++;
++        LLAMA_LOG_INFO("%s: acquire loaded adapter %d, reference count %u -> %u\n",
++                       __func__, adapter_id, ref_count_before, lazy_lora_adapter->ref_count);
+     } else {
+-        LLAMA_LOG_INFO("%s: load adapter %d\n", __func__, adapter_id);
+-        lazy_lora_adapter->ref_count = 1;
++        LLAMA_LOG_INFO("%s: cache lookup for adapter %d\n", __func__, adapter_id);
+         // Use LRU to unload unused adapter
+         if (ctx->lora_cache != nullptr) {
+-            lazy_lora_adapter->adapter = ctx->lora_cache->get((size_t)adapter_id,
+-                                                              &(ctx->model),
+-                                                              lazy_lora_adapter->path.c_str()).get();
++            bool cache_hit = false;
++            auto adapter = ctx->lora_cache->get(
++                    (size_t) adapter_id,
++                    &(ctx->model),
++                    lazy_lora_adapter->path.c_str(),
++                    ctx->lazy_load_lora_adapters,
++                    cache_hit,
++                    staged_data,
++                    staged_size);
++            if (!adapter) {
++                lazy_lora_adapter->adapter = nullptr;
++                lazy_lora_adapter->loaded = false;
++                lazy_lora_adapter->ref_count = 0;
++                LLAMA_LOG_ERROR("%s: failed to acquire adapter %d: no evictable cache entry or load failure\n",
++                                __func__, adapter_id);
++                return -1;
++            }
++            lazy_lora_adapter->adapter = adapter.get();
++            LLAMA_LOG_INFO("%s: adapter %d cache %s\n", __func__, adapter_id,
++                           cache_hit ? "hit" : "miss");
+         } else {
+             // std::async(std::launch::async, [ctx, lazy_lora_adapter]() {
+             //     llama_lora_adapter_init(&(ctx->model), lazy_lora_adapter->path.c_str());
+             //     // After the initialization, set the adapter as loaded
+             //     lazy_lora_adapter->loaded = true;
+             // });
++            // The no-cache configuration is not used by the experiment. Keep
++            // the legacy allocator here; prepared images require the LRU's
++            // transactional failure/rollback path.
++            if (staged_data != nullptr) {
++                LLAMA_LOG_ERROR("%s: prepared loading requires a non-zero LoRA cache\n", __func__);
++                return -1;
++            }
+             lazy_lora_adapter->adapter = llama_lora_adapter_init(&(ctx->model), lazy_lora_adapter->path.c_str());
++            if (lazy_lora_adapter->adapter == nullptr) {
++                lazy_lora_adapter->loaded = false;
++                lazy_lora_adapter->ref_count = 0;
++                return -1;
++            }
+         }
++        lazy_lora_adapter->ref_count = 1;
+         lazy_lora_adapter->loaded = true;
++        lazy_lora_adapter->state = LLAMA_LAZY_LORA_READY;
++        LLAMA_LOG_INFO("%s: acquire adapter %d succeeded, reference count 0 -> 1\n",
++                       __func__, adapter_id);
++    }
++    return 0;
++}
++
++int32_t llama_lazy_lora_adapter_reserve(
++        struct llama_context * ctx,
++        int32_t adapter_id,
++        struct llama_lora_reservation & out,
++        int32_t & evicted_id,
++        std::string & error) {
++    std::lock_guard<std::mutex> lock(ctx->lora_cache_mutex);
++    evicted_id = -1;
++    if (adapter_id < 0 ||
++        static_cast<size_t>(adapter_id) >= ctx->lazy_load_lora_adapters.size()) {
++        error = "adapter index out of range";
++        return -1;
+     }
++    if (adapter_id == ctx->resident_lora_adapter_id) {
++        error = "resident adapter does not participate in task acquire/release";
++        return -1;
++    }
++    if (ctx->lora_cache == nullptr) {
++        error = "asynchronous loading requires a non-zero LoRA cache";
++        return -1;
++    }
++    auto * container = ctx->lazy_load_lora_adapters[adapter_id];
++    if (container->state != LLAMA_LAZY_LORA_UNLOADED || container->loaded || container->adapter != nullptr) {
++        error = "adapter is not in the UNLOADED state";
++        return -1;
++    }
++    if (container->ref_count != 0) {
++        error = "unloaded adapter has a non-zero reference count";
++        return -1;
++    }
++    size_t victim = SIZE_MAX;
++    const int64_t reserve_begin = ggml_time_us();
++    if (!ctx->lora_cache->reserve((size_t) adapter_id, ctx->lazy_load_lora_adapters, out, victim, error)) {
++        return error == "all cache entries are in use" ? 1 : -1;
++    }
++    evicted_id = victim == SIZE_MAX ? -1 : (int32_t) victim;
++    LLAMA_LOG_INFO("STAGE_TIMING_RESERVE adapter_id=%d evicted_id=%d duration_us=%lld\n",
++                   adapter_id, evicted_id, (long long)(ggml_time_us() - reserve_begin));
+     return 0;
+ }
+ 
++int32_t llama_lora_reservation_load(
++        struct llama_model * model,
++        const char * path_lora,
++        struct llama_lora_reservation & reservation,
++        std::string & error) {
++    // No lock: the reserved object is owned by this thread until publish().
++    if (!reservation.object) {
++        error = "empty reservation";
++        return -1;
++    }
++    try {
++        llama_lora_adapter_init_internal(model, path_lora, *reservation.object, nullptr, 0);
++    } catch (const std::exception & err) {
++        error = err.what();
++        LLAMA_LOG_ERROR("%s: failed to load adapter %d from '%s': %s\n",
++                        __func__, reservation.adapter_id, path_lora, err.what());
++        reservation.object->clear();
++        return -1;
++    }
++    return 0;
++}
++
++int32_t llama_lazy_lora_adapter_publish(
++        struct llama_context * ctx,
++        struct llama_lora_reservation & reservation,
++        bool success) {
++    std::lock_guard<std::mutex> lock(ctx->lora_cache_mutex);
++    if (!reservation.object || ctx->lora_cache == nullptr) {
++        return -1;
++    }
++    const int32_t adapter_id = reservation.adapter_id;
++    ctx->lora_cache->publish(reservation, ctx->lazy_load_lora_adapters, success);
++    const bool published = adapter_id >= 0 &&
++        static_cast<size_t>(adapter_id) < ctx->lazy_load_lora_adapters.size() &&
++        ctx->lora_cache->contains((size_t) adapter_id);
++    return published ? 0 : 1;
++}
++
++bool llama_lazy_lora_adapter_status(
++        struct llama_context * ctx,
++        int32_t adapter_id,
++        int32_t * state,
++        uint32_t * ref_count,
++        uint64_t * generation,
++        bool * cached,
++        bool * resident) {
++    std::lock_guard<std::mutex> lock(ctx->lora_cache_mutex);
++    if (adapter_id < 0 ||
++        static_cast<size_t>(adapter_id) >= ctx->lazy_load_lora_adapters.size()) {
++        return false;
++    }
++    auto * container = ctx->lazy_load_lora_adapters[adapter_id];
++    if (state)      { *state      = container->state; }
++    if (ref_count)  { *ref_count  = container->ref_count; }
++    if (generation) { *generation = container->generation; }
++    if (cached)     { *cached     = ctx->lora_cache != nullptr && ctx->lora_cache->contains((size_t) adapter_id); }
++    if (resident)   { *resident   = adapter_id == ctx->resident_lora_adapter_id && ctx->resident_lora_adapter != nullptr; }
++    return true;
++}
++
++void llama_lora_cache_stats(
++        struct llama_context * ctx,
++        size_t * n_published,
++        size_t * n_reserved,
++        size_t * capacity) {
++    std::lock_guard<std::mutex> lock(ctx->lora_cache_mutex);
++    const size_t published = ctx->lora_cache ? ctx->lora_cache->size() : 0;
++    const size_t reserved  = ctx->lora_cache ? ctx->lora_cache->n_reserved() : 0;
++    const size_t cap       = ctx->lora_cache ? ctx->lora_cache->get_capacity() : 0;
++    if (n_published) { *n_published = published; }
++    if (n_reserved)  { *n_reserved  = reserved; }
++    if (capacity)    { *capacity    = cap; }
++}
++
++int32_t llama_lazy_load_lora_adapter(struct llama_context* ctx,
++                                     int32_t adapter_id) {
++    return llama_lazy_load_lora_adapter_internal(ctx, adapter_id, nullptr, 0);
++}
++
++int32_t llama_lazy_load_lora_adapter_prepared(
++        struct llama_context * ctx,
++        int32_t adapter_id,
++        const uint8_t * staged_data,
++        size_t staged_size) {
++    if (staged_data == nullptr || staged_size == 0) {
++        LLAMA_LOG_ERROR("%s: empty staged image for adapter %d\n", __func__, adapter_id);
++        return -1;
++    }
++    return llama_lazy_load_lora_adapter_internal(ctx, adapter_id, staged_data, staged_size);
++}
++
+ int32_t llama_lazy_lora_adapter_register(struct llama_context* ctx,
+                                          struct llama_lazy_lora_adapter_container* lazy_lora_adapter) {
+     if (ctx->cparams.flash_attn) {
+         LLAMA_LOG_ERROR("%s: flash_attn is not compatible with LoRA\n", __func__);
+         return -1;
+     }
++    std::lock_guard<std::mutex> lock(ctx->lora_cache_mutex);
+     LLAMA_LOG_INFO("%s: register lazy lora adapter\n", __func__);
+     ctx->lazy_load_lora_adapters.emplace_back(lazy_lora_adapter);
+     return 0;
+@@ -19018,28 +19563,203 @@ LlamaLoraLRUCache::LlamaLoraLRUCache(size_t capacity, struct llama_model* model)
+     }
+ }
+ 
+-std::shared_ptr<llama_lora_adapter> LlamaLoraLRUCache::get(size_t adapter_id, struct llama_model* model, const char* path_lora) {
++LlamaLoraLRUCache::~LlamaLoraLRUCache() {
++    // The owner must publish (or fail) every reservation before destroying the
++    // context; an object still held by a loader would outlive the base model.
++    if (!reserved_set.empty()) {
++        LLAMA_LOG_ERROR("%s: destroyed with %zu outstanding reservation(s) - join loader threads before llama_free\n",
++                __func__, reserved_set.size());
++    }
++}
++
++bool LlamaLoraLRUCache::contains(size_t adapter_id) const {
++    return cache_set.find(adapter_id) != cache_set.end();
++}
++
++bool LlamaLoraLRUCache::reserved(size_t adapter_id) const {
++    return reserved_set.find(adapter_id) != reserved_set.end();
++}
++
++bool LlamaLoraLRUCache::evict_one(
++        std::vector<struct llama_lazy_lora_adapter_container *> & containers,
++        size_t requester_id,
++        size_t & evicted_id) {
++    evicted_id = SIZE_MAX;
++    auto victim = adapter_cache.end();
++    for (auto it = adapter_cache.end(); it != adapter_cache.begin();) {
++        --it;
++        const size_t candidate_id = it->first;
++        if (candidate_id < containers.size() &&
++            containers[candidate_id]->ref_count == 0) {
++            victim = it;
++            break;
++        }
++    }
++    if (victim == adapter_cache.end()) {
++        return false;
++    }
++
++    const size_t victim_id = victim->first;
++    auto victim_adapter = victim->second;
++    auto * victim_container = containers[victim_id];
++    const int64_t evict_begin = ggml_time_us();
++    LLAMA_LOG_INFO("Evicting adapter %zu with reference count %u\n",
++                   victim_id, victim_container->ref_count);
++    cache_set.erase(victim_id);
++    adapter_cache.erase(victim);
++    // The graph of the current decode only references adapters with
++    // ref_count > 0, so a ref_count==0 victim has no in-flight reader.
++    victim_adapter->clear();
++    victim_container->adapter = nullptr;
++    victim_container->loaded = false;
++    victim_container->state = LLAMA_LAZY_LORA_UNLOADED;
++    LLAMA_LOG_INFO("Evicted adapter %zu: cache entry absent, adapter == nullptr, loaded == false, reference count %u\n",
++                   victim_id, victim_container->ref_count);
++    memory_pool.push(victim_adapter); // Return the adapter to the memory pool
++    LLAMA_LOG_INFO("STAGE_TIMING_EVICT adapter_id=%zu victim_id=%zu duration_us=%lld\n", requester_id, victim_id, (long long)(ggml_time_us()-evict_begin));
++    evicted_id = victim_id;
++    return true;
++}
++
++bool LlamaLoraLRUCache::reserve(
++        size_t adapter_id,
++        std::vector<struct llama_lazy_lora_adapter_container *> & containers,
++        llama_lora_reservation & out,
++        size_t & evicted_id,
++        std::string & error) {
++    evicted_id = SIZE_MAX;
++    if (capacity == 0) {
++        error = "LoRA cache capacity is 0";
++        return false;
++    }
++    if (adapter_id >= containers.size()) {
++        error = "adapter index out of range";
++        return false;
++    }
++    if (contains(adapter_id)) {
++        error = "adapter is already published";
++        return false;
++    }
++    if (reserved(adapter_id)) {
++        error = "adapter is already reserved";
++        return false;
++    }
++    // pool + published + reserved == capacity, so an empty pool means the
++    // cache (including in-flight reservations) is full.
++    if (memory_pool.empty() && !evict_one(containers, adapter_id, evicted_id)) {
++        error = "all cache entries are in use";
++        return false;
++    }
++    if (memory_pool.empty()) {
++        error = "memory pool is empty after eviction";
++        return false;
++    }
++
++    auto * container = containers[adapter_id];
++    out.adapter_id = (int32_t) adapter_id;
++    out.generation = ++container->generation;
++    out.object     = memory_pool.top();
++    memory_pool.pop();
++    reserved_set.insert(adapter_id);
++    container->state = LLAMA_LAZY_LORA_LOADING;
++    LLAMA_LOG_INFO("Reserved pool object for adapter %zu (generation %llu, published %zu, reserved %zu, capacity %zu)\n",
++                   adapter_id, (unsigned long long) out.generation, adapter_cache.size(), reserved_set.size(), capacity);
++    return true;
++}
++
++void LlamaLoraLRUCache::publish(
++        llama_lora_reservation & reservation,
++        std::vector<struct llama_lazy_lora_adapter_container *> & containers,
++        bool success) {
++    const size_t adapter_id = (size_t) reservation.adapter_id;
++    auto object = reservation.object;
++    reservation.object.reset();
++    reservation.adapter_id = -1;
++    if (!object) {
++        return;
++    }
++    reserved_set.erase(adapter_id);
++
++    llama_lazy_lora_adapter_container * container =
++        adapter_id < containers.size() ? containers[adapter_id] : nullptr;
++    const bool current = container != nullptr &&
++        container->state == LLAMA_LAZY_LORA_LOADING &&
++        container->generation == reservation.generation;
++
++    if (success && current) {
++        adapter_cache.emplace_front(adapter_id, object);
++        cache_set.insert(adapter_id);
++        container->adapter = object.get();
++        container->state = LLAMA_LAZY_LORA_READY;
++        container->loaded = true;
++        LLAMA_LOG_INFO("Published adapter %zu (generation %llu), reference count %u\n",
++                       adapter_id, (unsigned long long) reservation.generation, container->ref_count);
++        return;
++    }
++
++    if (!current) {
++        LLAMA_LOG_WARN("Discarding stale reservation for adapter %zu (generation %llu)\n",
++                       adapter_id, (unsigned long long) reservation.generation);
++    }
++    object->clear();
++    memory_pool.push(object);
++    if (container != nullptr && current) {
++        container->adapter = nullptr;
++        container->loaded = false;
++        container->state = LLAMA_LAZY_LORA_UNLOADED;
++    }
++    LLAMA_LOG_INFO("Returned reserved object for adapter %zu to the pool (published %zu, reserved %zu, capacity %zu)\n",
++                   adapter_id, adapter_cache.size(), reserved_set.size(), capacity);
++}
++
++std::shared_ptr<llama_lora_adapter> LlamaLoraLRUCache::get(
++        size_t adapter_id,
++        struct llama_model * model,
++        const char * path_lora,
++        std::vector<struct llama_lazy_lora_adapter_container *> & containers,
++        bool & cache_hit,
++        const uint8_t * staged_data,
++        size_t staged_size) {
+     // If the adapter is already in the cache, move it to the front
+     if (cache_set.find(adapter_id) != cache_set.end()) {
+         auto list_it = std::find_if(adapter_cache.begin(), adapter_cache.end(), 
+                                 [adapter_id](const std::pair<size_t, std::shared_ptr<llama_lora_adapter>>& pair) { return pair.first == adapter_id; });
+         adapter_cache.splice(adapter_cache.begin(), adapter_cache, list_it);
++        cache_hit = true;
+         return list_it->second;
+     }
+ 
+     // If the adapter is not in the cache, create/load it
+-    return load_adapter(adapter_id, model, path_lora);
++    cache_hit = false;
++    return load_adapter(adapter_id, model, path_lora, containers, staged_data, staged_size);
+ }
+ 
+-std::shared_ptr<llama_lora_adapter> LlamaLoraLRUCache::load_adapter(size_t adapter_id, struct llama_model* model, const char* path_lora) {
+-    // If we have reached capacity, remove the least recently used adapter
+-    if (adapter_cache.size() >= capacity) {
+-        auto lru = adapter_cache.back();
+-        cache_set.erase(lru.first);
+-        lru.second.get()->clear();
+-        memory_pool.push(lru.second); // Return the adapter to the memory pool
+-        adapter_cache.pop_back();
+-        LLAMA_LOG_INFO("Evicted adapter with ID: %ld\n", lru.first);
++std::shared_ptr<llama_lora_adapter> LlamaLoraLRUCache::load_adapter(
++        size_t adapter_id,
++        struct llama_model * model,
++        const char * path_lora,
++        std::vector<struct llama_lazy_lora_adapter_container *> & containers,
++        const uint8_t * staged_data,
++        size_t staged_size) {
++    if (capacity == 0) {
++        LLAMA_LOG_ERROR("Cannot load adapter %zu: LoRA cache capacity is 0\n", adapter_id);
++        return nullptr;
++    }
++
++    if (reserved(adapter_id)) {
++        LLAMA_LOG_ERROR("Cannot load adapter %zu synchronously: an asynchronous load is in flight\n", adapter_id);
++        return nullptr;
++    }
++
++    // In-flight reservations hold pool objects too, so the pool (not the
++    // published count) decides whether an eviction is needed.
++    if (memory_pool.empty()) {
++        size_t evicted_id = SIZE_MAX;
++        if (!evict_one(containers, adapter_id, evicted_id)) {
++            LLAMA_LOG_ERROR("Cannot load adapter %zu: all %zu cache entries are in use (%zu reserved)\n",
++                            adapter_id, adapter_cache.size(), reserved_set.size());
++            return nullptr;
++        }
+     }
+ 
+     // Get an adapter from the memory pool
+@@ -19049,24 +19769,36 @@ std::shared_ptr<llama_lora_adapter> LlamaLoraLRUCache::load_adapter(size_t adapt
+         memory_pool.pop();
+     } else {
+         LLAMA_LOG_ERROR("Memory pool is empty\n");
++        return nullptr;
+     }
+ 
+-    llama_lora_adapter_init_internal(model, path_lora, *adapter);
++    try {
++        llama_lora_adapter_init_internal(model, path_lora, *adapter, staged_data, staged_size);
++    } catch (const std::exception & err) {
++        LLAMA_LOG_ERROR("Failed to load adapter %zu: %s\n", adapter_id, err.what());
++        adapter->clear();
++        memory_pool.push(adapter);
++        return nullptr;
++    }
+     auto new_adapter = std::shared_ptr<llama_lora_adapter>(adapter);
+     adapter_cache.emplace_front(adapter_id, new_adapter);
+     cache_set.insert(adapter_id);
++    if (adapter_id < containers.size()) {
++        containers[adapter_id]->state = LLAMA_LAZY_LORA_READY;
++    }
+ 
+     LLAMA_LOG_INFO("Loaded adapter with ID: %ld\n", adapter_id);
+     return new_adapter;
+ }
+ 
+ struct llama_lora_adapter * llama_lora_adapter_init(struct llama_model * model, const char * path_lora) {
++    struct llama_lora_adapter * adapter = new llama_lora_adapter(model);
+     try {
+-        struct llama_lora_adapter * adapter = new llama_lora_adapter(model);
+         llama_lora_adapter_init_internal(model, path_lora, *adapter);
+         return adapter;
+     } catch (const std::exception & err) {
+         LLAMA_LOG_ERROR("%s: failed to apply lora adapter: %s\n", __func__, err.what());
++        delete adapter;
+         return nullptr;
+     }
+ }
+@@ -20375,6 +21107,7 @@ void llama_batch_free(struct llama_batch batch) {
+         free(batch.seq_id);
+     }
+     if (batch.logits)   free(batch.logits);
++    if (batch.adapter_id) free(batch.adapter_id);
+ }
+ 
+ int32_t llama_encode(
+@@ -20524,6 +21257,40 @@ float * llama_get_embeddings_ith(struct llama_context * ctx, int32_t i) {
+     }
+ }
+ 
++float * llama_get_hidden_ith(struct llama_context * ctx, int32_t i) {
++    int32_t j = -1;
++    llama_synchronize(ctx);
++    try {
++        if (ctx->hidden == nullptr) {
++            throw std::runtime_error("no result_norm hidden states");
++        }
++        if (i < 0) {
++            j = ctx->n_outputs + i;
++            if (j < 0) {
++                throw std::runtime_error(format("negative index out of range [0, %d)", ctx->n_outputs));
++            }
++        } else if ((size_t) i >= ctx->output_ids.size()) {
++            throw std::runtime_error(format("out of range [0, %lu)", ctx->output_ids.size()));
++        } else {
++            j = ctx->output_ids[i];
++        }
++        if (j < 0) {
++            throw std::runtime_error(format("batch.logits[%d] != true", i));
++        }
++        if (j >= ctx->n_outputs) {
++            throw std::runtime_error(format("corrupt output buffer (j=%d, n_outputs=%d)", j, ctx->n_outputs));
++        }
++        return ctx->hidden + j*ctx->model.hparams.n_embd;
++    } catch (const std::exception & err) {
++        LLAMA_LOG_ERROR("%s: invalid hidden id %d, reason: %s\n", __func__, i, err.what());
++#ifndef NDEBUG
++        GGML_ABORT("fatal error");
++#else
++        return nullptr;
++#endif
++    }
++}
++
+ float * llama_get_embeddings_seq(struct llama_context * ctx, llama_seq_id seq_id) {
+     llama_synchronize(ctx);
+ 
+diff --git a/edgelora/tests/CMakeLists.txt b/edgelora/tests/CMakeLists.txt
+index 30e71cfd44c5161b0bbcf9081d2f50dfefacb484..f4fd255f0c4a3fd8b5f5c607a5583009a8d8967c 100644
+--- a/edgelora/tests/CMakeLists.txt
++++ b/edgelora/tests/CMakeLists.txt
+@@ -113,6 +113,7 @@ llama_target_and_test(test-quantize-fns.cpp)
+ llama_target_and_test(test-quantize-perf.cpp)
+ llama_target_and_test(test-sampling.cpp)
+ llama_target_and_test(test-chat-template.cpp)
++llama_target_and_test(test-router-classifier.cpp)
+ 
+ llama_target_and_test(test-grammar-parser.cpp)
+ llama_target_and_test(test-llama-grammar.cpp)
+diff --git a/edgelora/tests/test-router-classifier.cpp b/edgelora/tests/test-router-classifier.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..64b7ba304878d11c030e86b22b50ea7f4ab26180
+--- /dev/null
++++ b/edgelora/tests/test-router-classifier.cpp
+@@ -0,0 +1,120 @@
++#include "router-classifier.h"
++
++#include <cassert>
++#include <cmath>
++#include <cstdio>
++#include <cstring>
++#include <fstream>
++#include <limits>
++#include <string>
++#include <vector>
++
++static void write_u32(std::ofstream & out, uint32_t value) {
++    const unsigned char bytes[4] = {
++        static_cast<unsigned char>(value), static_cast<unsigned char>(value >> 8),
++        static_cast<unsigned char>(value >> 16), static_cast<unsigned char>(value >> 24),
++    };
++    out.write(reinterpret_cast<const char *>(bytes), sizeof(bytes));
++}
++
++static void write_classifier(const std::string & path, const char magic[8], uint32_t dtype,
++                             uint32_t labels, uint32_t hidden, const std::vector<float> & weights) {
++    std::ofstream out(path, std::ios::binary);
++    out.write(magic, 8);
++    write_u32(out, 1);
++    write_u32(out, dtype);
++    write_u32(out, labels);
++    write_u32(out, hidden);
++    for (float value : weights) {
++        uint32_t bits;
++        std::memcpy(&bits, &value, sizeof(bits));
++        write_u32(out, bits);
++    }
++}
++
++int main() {
++    const char magic[8] = {'E', 'L', 'R', 'T', 'R', 'S', 'C', 'R'};
++    const std::string path = "test-router-classifier.tmp";
++    router_classifier classifier;
++    std::string error;
++
++    std::vector<float> valid_weights(2 * 3072, 0.0f);
++    write_classifier(path, magic, 1, 2, 3072, valid_weights);
++    assert(router_classifier_load(path, classifier, error));
++    assert(classifier.num_labels == 2 && classifier.hidden_size == 3072);
++
++    classifier.hidden_size = 3;
++    classifier.weights = {1, 2, 3, -1, 1, 0};
++    const float hidden[] = {2, 1, -1};
++    const auto scores = router_classifier_score(classifier, hidden, 3);
++    assert(scores.size() == 2 && scores[0] == 1.0f && scores[1] == -1.0f);
++
++    assert((router_rank_labels({3.0f, 3.0f}) == std::vector<int32_t>{0, 1}));
++    const std::vector<int32_t> map = {2, 0};
++    bool cache_hit = false;
++    const std::vector<int32_t> ranked = {0, 1};
++    assert(router_top_k_valid(1, 2));
++    assert(router_top_k_valid(2, 2));
++    assert(!router_top_k_valid(0, 2));
++    assert(!router_top_k_valid(-1, 2));
++    assert(!router_top_k_valid(3, 2));
++    assert((router_top_candidates(ranked, 1) == std::vector<int32_t>{0}));
++    assert((router_top_candidates(ranked, 2) == ranked));
++    assert(router_top_candidates(ranked, 0).empty());
++    assert(router_top_candidates(ranked, 3).empty());
++
++    assert(router_select_adapter(router_top_candidates(ranked, 1), map, 1,
++                                 {true, true, false}, cache_hit) == 2);
++    assert(!cache_hit); // top_k=1: Top-2 cached cannot override a Top-1 miss
++    assert(router_select_adapter(router_top_candidates(ranked, 2), map, 1,
++                                 {true, true, false}, cache_hit) == 0);
++    assert(cache_hit); // top_k=2: Top-2 cached is eligible
++    assert(router_select_adapter({0, 1}, map, 1, {false, false, false}, cache_hit) == 2);
++    assert(!cache_hit); // all miss => top-1
++    assert(router_select_adapter({0, 1}, {1, 0}, 1, {true, true}, cache_hit) == 0);
++    assert(cache_hit); // Router adapter ID is excluded even if resident and ranked first
++    assert(router_select_adapter({0}, {1}, 1, {false, true}, cache_hit) == -1);
++    assert(!cache_hit); // Router adapter ID can never be selected as a candidate
++
++    assert(router_preload_count(10, 2) == 2);
++    assert(router_preload_count(0, 2) == 0);
++    assert((router_task_adapter_ids(3, 2) == std::vector<int32_t>{0, 1}));
++    assert((router_task_adapter_ids(3, -1) == std::vector<int32_t>{0, 1, 2}));
++    assert(router_should_route(true, false, false));
++    assert(!router_should_route(true, true, false)); // explicit adapter bypass
++
++    char bad_magic[8] = {};
++    write_classifier(path, bad_magic, 1, 2, 3, std::vector<float>(6));
++    assert(!router_classifier_load(path, classifier, error));
++    write_classifier(path, magic, 2, 2, 3, std::vector<float>(6));
++    assert(!router_classifier_load(path, classifier, error));
++    write_classifier(path, magic, 1, 2, 3, std::vector<float>(6));
++    assert(!router_classifier_load(path, classifier, error)); // invalid dimensions
++    write_classifier(path, magic, 1, 2, 3072, std::vector<float>(1));
++    assert(!router_classifier_load(path, classifier, error)); // valid header, invalid file size
++    valid_weights[100] = std::numeric_limits<float>::infinity();
++    write_classifier(path, magic, 1, 2, 3072, valid_weights);
++    assert(!router_classifier_load(path, classifier, error));
++    std::remove(path.c_str());
++    // Actual six-label storage and deterministic ranking, including cache fallback.
++    std::vector<float> six_weights(6 * 3072, 0.0f);
++    for (size_t label = 0; label < 6; ++label) { six_weights[label * 3072] = float(label); }
++    write_classifier(path, magic, 1, 6, 3072, six_weights);
++    assert(router_classifier_load(path, classifier, error));
++    std::vector<float> six_hidden(3072, 0.0f);
++    six_hidden[0] = 1.0f;
++    const auto six_scores = router_classifier_score(classifier, six_hidden.data(), 3072);
++    assert((router_rank_labels(six_scores) == std::vector<int32_t>{5,4,3,2,1,0}));
++    assert(router_select_adapter({5,4}, {0,1,2,3,4,5}, 6,
++                                 {false,false,false,false,true,false,true}, cache_hit) == 4);
++    assert(cache_hit);
++    assert(router_select_adapter({5}, {0,1,2,3,4,5}, 6,
++                                 {false,false,false,false,true,false,true}, cache_hit) == 5);
++    assert(!cache_hit);
++    six_hidden[0] = std::numeric_limits<float>::infinity();
++    assert(router_classifier_score(classifier, six_hidden.data(), 3072).empty());
++    write_classifier(path, magic, 1, 7, 3072, std::vector<float>(7 * 3072));
++    assert(!router_classifier_load(path, classifier, error));
++    std::remove(path.c_str());
++    return 0;
++}
