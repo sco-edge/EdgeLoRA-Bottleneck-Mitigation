@@ -1,0 +1,9 @@
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch==2.4.1+cu121
+transformers==4.45.2
+peft==0.13.2
+accelerate==1.0.1
+safetensors==0.4.5
+datasets==3.0.2
+sentencepiece==0.2.0
+protobuf==5.28.3
