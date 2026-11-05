@@ -1,0 +1,28 @@
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from helpers import load
+summarize = load('experiments/summarize.py')
+class SummaryTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+    def run_record(self, name, block, value, valid=True):
+        p = self.root/name
+        p.mkdir()
+        (p/'config.json').write_text(json.dumps(dict(experiment='throughput', mode='baseline', block=block)))
+        (p/'summary.json').write_text(json.dumps(dict(valid=valid, metrics=dict(throughput_rps=value))))
+        return p
+    def test_aggregation_and_invalid_runs(self):
+        for i,v in enumerate([2,9,4]): self.run_record(str(i),i,v)
+        self.run_record('failed',3,0,False)
+        result = summarize.aggregate(self.root)
+        self.assertEqual(result['groups'][0]['metrics']['throughput_rps'], dict(median=4, minimum=2, maximum=9))
+        self.assertEqual(result['groups'][0]['blocks'], [0,1,2])
+        self.assertEqual(len(result['invalid_runs']),1)
+    def test_duplicate_blocks_rejected(self):
+        self.run_record('first',0,2)
+        self.run_record('rerun',0,3)
+        with self.assertRaisesRegex(ValueError,'Duplicate block'): summarize.aggregate(self.root)
