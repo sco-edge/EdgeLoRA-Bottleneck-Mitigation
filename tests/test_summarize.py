@@ -26,3 +26,14 @@ class SummaryTests(unittest.TestCase):
         self.run_record('first',0,2)
         self.run_record('rerun',0,3)
         with self.assertRaisesRegex(ValueError,'Duplicate block'): summarize.aggregate(self.root)
+
+def test_nonfinite_values_rejected(self):
+    self.run_record('bad',0,float('nan'))
+    with self.assertRaisesRegex(ValueError,'invalid numeric'): summarize.aggregate(self.root)
+SummaryTests.test_nonfinite_values_rejected = test_nonfinite_values_rejected
+def test_metric_schema_mismatch(self):
+    self.run_record('one',0,1)
+    p = self.run_record('two',1,2)
+    (p/'summary.json').write_text(json.dumps(dict(valid=True,metrics=dict(other=3))))
+    with self.assertRaisesRegex(ValueError,'Inconsistent numeric'): summarize.aggregate(self.root)
+SummaryTests.test_metric_schema_mismatch = test_metric_schema_mismatch

@@ -3,6 +3,7 @@
 import argparse
 import collections
 import json
+import math
 from pathlib import Path
 import statistics
 
@@ -19,12 +20,25 @@ def aggregate(root):
             failures.append(str(file.relative_to(root)))
             continue
         key = tuple(config.get(k) for k in ('experiment', 'mode', 'rate', 'case', 'state', 'input', 'ongoing', 'cache'))
-        groups[key].append((config['block'], run['metrics']))
+        metrics = run.get('metrics')
+        if not isinstance(metrics, dict) or not metrics:
+            raise ValueError(f'{file}: valid run requires a nonempty metrics object')
+        if type(config.get('block')) is not int or config['block'] < 0:
+            raise ValueError(f'{file}: block must be a nonnegative integer')
+        for field, value in metrics.items():
+            if isinstance(value, bool) or (isinstance(value, (int, float)) and not math.isfinite(value)):
+                raise ValueError(f'{file}: invalid numeric metric {field}')
+        groups[key].append((config['block'], metrics))
     result = []
     for key, records in groups.items():
         if len({r[0] for r in records}) != len(records):
             raise ValueError(f'Duplicate block in group {key}; do not count reruns as independent repeats')
         fields = [k for k, v in records[0][1].items() if isinstance(v, (int, float))]
+        expected_fields = set(fields)
+        for block, metrics in records:
+            actual_fields = {k for k, v in metrics.items() if type(v) in (int, float)}
+            if actual_fields != expected_fields:
+                raise ValueError(f'Inconsistent numeric metrics in group {key}, block {block}')
         result.append(dict(configuration=dict(zip(('experiment', 'mode', 'rate', 'case', 'state', 'input', 'ongoing', 'cache'), key)),
              n=len(records), blocks=sorted(r[0] for r in records), metrics={field:dict(
                  median=statistics.median(r[1][field] for r in records),
