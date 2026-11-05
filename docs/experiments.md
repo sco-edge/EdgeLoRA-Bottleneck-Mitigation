@@ -82,6 +82,12 @@ The random-arrival experiments use seed 20261012. Single/fanout/ablation select 
 
 Max TBT is computed from consecutive **server token-generation timestamps** in `timeline_event=token` records, matched to request labels through `rm_event=slot`. Client HTTP gaps are never substituted. Fanout reports the mean of the individual ongoing requests' Max TBT within a run; the paper reports the median of that value over 30 runs.
 
+### Recorded latency results
+
+![Baseline and Combined Max TBT and incoming TTFT across repeated-loading and fanout conditions.](figures/latency.png)
+
+Both panels use seconds; lower values are preferable. `A2 / 128` means two ongoing requests and a 128-token incoming request. Fanout uses cold adapter files, while Repeat 6 uses warm files and a two-entry task cache. The CSV supplies medians, so no uncertainty bars are invented. The incoming TTFT panel includes the A4 / 16 condition where Combined is slower. Output differences remain unresolved. [CSV](../experiments/paper_results/latency.csv) · [SVG](figures/latency.svg)
+
 ### Cold adapter-file reads
 
 Cold runs require the original loader-entry page-residency observer. It checks the specific adapter file immediately before `fopen`; it does not clear the system-wide cache.

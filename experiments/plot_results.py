@@ -58,7 +58,21 @@ def serving(out):
     fig.legend(*axes[0].get_legend_handles_labels(),loc='upper center',bbox_to_anchor=(.5,.91),ncol=4,frameon=False)
     finish(fig,out,'serving','24 requests/run; 3 runs/point. Median with min-max bars (not confidence intervals).\nCompletion: median of run means. Finite traces include drain; output equivalence remains unresolved.')
 
-PLOTS = {'serving': serving}
+def latency(out):
+    data = rows('latency.csv')
+    conditions = ['Repeat 6','A2 / 16','A4 / 16','A2 / 128','A4 / 128','A2 / 256','A4 / 256']
+    fig, axes = plt.subplots(1,2,figsize=(12,5.2))
+    for ax,metric,title in zip(axes,['A Max TBT','B TTFT'],['Ongoing requests: Max TBT','Incoming requests: TTFT']):
+        for index,label in enumerate(['Baseline','Combined']):
+            y = [number(one(data,experiment='serving',condition=c,metric=metric,configuration=label),'median_ms')/1000 for c in conditions]
+            ax.bar([i+(index-.5)*.36 for i in range(len(y))],y,width=.36,label=label,color=COLORS[0 if index==0 else 3])
+        ax.set(title=title,ylabel='Seconds (lower is better)',xticks=range(len(conditions)),xticklabels=conditions)
+        ax.tick_params(axis='x',rotation=35,labelsize=8)
+    fig.suptitle('Matched-arrival latency measurements',fontsize=16,y=.98)
+    fig.legend(*axes[0].get_legend_handles_labels(),loc='upper center',bbox_to_anchor=(.5,.91),ncol=2,frameon=False)
+    finish(fig,out,'latency','A2/A4: 2/4 ongoing requests; suffix: incoming input tokens, cold adapter file. Repeat 6: warm file, cache 2.\nMedians over 30 runs. Fanout Max TBT averages per-request maxima within each run. Dispersion is not in the CSV.')
+
+PLOTS = {'serving': serving, 'latency': latency}
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
