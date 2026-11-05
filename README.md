@@ -6,6 +6,14 @@ Built on [EdgeLoRA](https://github.com/shenzheyu/EdgeLoRA), this project studies
 
 The repository contains the runtime changes, experiment code, and RTX training/export tools. The upstream runtime is fetched at a fixed commit and patched locally; model weights and datasets are obtained separately.
 
+## Workflow at a glance
+
+1. **Train on RTX 2080 Ti:** prepare task data, train six task adapters, profile their outputs, and train the six-label router.
+2. **Export for Jetson:** convert the base model and adapters to GGUF and export the router classifier.
+3. **Compare serving variants:** build the patched runtime, launch one variant, and run the controlled workloads.
+
+For runtime-only experiments, start with the quick start below and provide the required local model files. For model preparation, follow the [training guide](training/README.md). The router entry point is now `training/adapter-router/train_router.py`; the guide includes the mapping from archived filenames.
+
 ## What changes?
 
 | Variant | Adapter preparation | LoRA output accumulation |
