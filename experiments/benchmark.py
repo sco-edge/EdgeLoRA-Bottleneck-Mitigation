@@ -14,6 +14,8 @@ import os
 from pathlib import Path
 import random
 import statistics
+import sys
+import urllib.parse
 import threading
 import time
 import traceback
@@ -341,6 +343,25 @@ def latency(c, args, out):
                 mean_incoming_ttft_ms=statistics.mean(metrics[f'B{i}']['ttft_ms'] for i in range(len(targets))))
 
 
+def validate_inputs(args):
+    """Check local prerequisites before HTTP warmup or result-directory creation."""
+    if not sys.platform.startswith('linux'):
+        raise ValueError('Live benchmarks require Linux mincore and posix_fadvise; use --dry-run elsewhere')
+    url = urllib.parse.urlsplit(args.url)
+    if url.scheme not in ('http', 'https') or not url.hostname:
+        raise ValueError('--url must be an HTTP(S) server address')
+    if args.experiment == 'throughput' and args.cache != 2:
+        raise ValueError('Paper throughput experiment requires cache=2')
+    required = NAMES[:4] if args.experiment == 'throughput' else (
+        ('math', 'ifeval') if args.case in ('repeated', 'motivation-repeated') else ('math',))
+    for name in required:
+        path = args.artifacts / f'{name}.gguf'
+        if not path.is_file() or path.stat().st_size == 0:
+            raise ValueError(f'Missing or empty local adapter file: {path}')
+    if args.experiment == 'latency' and not args.server_log.is_file():
+        raise ValueError(f'Local server log does not exist: {args.server_log}')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('experiment', choices=('throughput', 'latency'))
@@ -377,6 +398,10 @@ def main():
         return
     if args.out is None or (args.experiment == 'latency' and args.server_log is None):
         parser.error('--out is required; latency also requires --server-log')
+    try:
+        validate_inputs(args)
+    except (OSError, ValueError) as exc:
+        parser.error(str(exc))
     args.out.mkdir(parents=True, exist_ok=False)
     config = {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()}
     save(args.out / 'config.json', config)
