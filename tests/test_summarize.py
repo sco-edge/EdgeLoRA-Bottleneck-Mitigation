@@ -37,3 +37,9 @@ def test_metric_schema_mismatch(self):
     (p/'summary.json').write_text(json.dumps(dict(valid=True,metrics=dict(other=3))))
     with self.assertRaisesRegex(ValueError,'Inconsistent numeric'): summarize.aggregate(self.root)
 SummaryTests.test_metric_schema_mismatch = test_metric_schema_mismatch
+
+def test_interrupted_run_is_visible(self):
+    p = self.run_record('interrupted',0,2)
+    (p/'summary.json').unlink()
+    self.assertEqual(summarize.aggregate(self.root)['incomplete_runs'], ['interrupted'])
+SummaryTests.test_interrupted_run_is_visible = test_interrupted_run_is_visible

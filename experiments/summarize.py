@@ -11,6 +11,8 @@ import statistics
 def aggregate(root):
     groups = collections.defaultdict(list)
     failures = []
+    incomplete = [str(p.parent.relative_to(root)) for p in sorted(root.rglob('config.json'))
+                  if not (p.parent / 'summary.json').is_file()]
     for file in sorted(root.rglob('summary.json')):
         if not (file.parent / 'config.json').exists():
             continue
@@ -43,7 +45,7 @@ def aggregate(root):
              n=len(records), blocks=sorted(r[0] for r in records), metrics={field:dict(
                  median=statistics.median(r[1][field] for r in records),
                  minimum=min(r[1][field] for r in records), maximum=max(r[1][field] for r in records)) for field in fields}))
-    return dict(groups=result, invalid_runs=failures, error_bars='minimum and maximum; not confidence intervals')
+    return dict(groups=result, invalid_runs=failures, incomplete_runs=incomplete, error_bars='minimum and maximum; not confidence intervals')
 
 
 def main():
