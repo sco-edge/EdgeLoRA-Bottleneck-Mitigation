@@ -1,0 +1,2112 @@
+{
+  "traces": [
+    [
+      {
+        "label": "r000",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 0.0
+      },
+      {
+        "label": "r001",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 3.3333333333333335
+      },
+      {
+        "label": "r002",
+        "adapter_id": 2,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 6.666666666666667
+      },
+      {
+        "label": "r003",
+        "adapter_id": 3,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 10.0
+      },
+      {
+        "label": "r004",
+        "adapter_id": 0,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 13.333333333333334
+      },
+      {
+        "label": "r005",
+        "adapter_id": 1,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 16.666666666666668
+      },
+      {
+        "label": "r006",
+        "adapter_id": 2,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 20.0
+      },
+      {
+        "label": "r007",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 23.333333333333336
+      },
+      {
+        "label": "r008",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 26.666666666666668
+      },
+      {
+        "label": "r009",
+        "adapter_id": 1,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 30.0
+      },
+      {
+        "label": "r010",
+        "adapter_id": 2,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 33.333333333333336
+      },
+      {
+        "label": "r011",
+        "adapter_id": 3,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 36.66666666666667
+      },
+      {
+        "label": "r012",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 40.0
+      },
+      {
+        "label": "r013",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 43.333333333333336
+      },
+      {
+        "label": "r014",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 46.66666666666667
+      },
+      {
+        "label": "r015",
+        "adapter_id": 3,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 50.0
+      },
+      {
+        "label": "r016",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 53.333333333333336
+      },
+      {
+        "label": "r017",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 56.66666666666667
+      },
+      {
+        "label": "r018",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 60.0
+      },
+      {
+        "label": "r019",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 63.333333333333336
+      },
+      {
+        "label": "r020",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 66.66666666666667
+      },
+      {
+        "label": "r021",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 70.0
+      },
+      {
+        "label": "r022",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 73.33333333333334
+      },
+      {
+        "label": "r023",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 76.66666666666667
+      }
+    ],
+    [
+      {
+        "label": "r000",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 0.0
+      },
+      {
+        "label": "r001",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 1.6666666666666667
+      },
+      {
+        "label": "r002",
+        "adapter_id": 2,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 3.3333333333333335
+      },
+      {
+        "label": "r003",
+        "adapter_id": 3,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 5.0
+      },
+      {
+        "label": "r004",
+        "adapter_id": 0,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 6.666666666666667
+      },
+      {
+        "label": "r005",
+        "adapter_id": 1,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 8.333333333333334
+      },
+      {
+        "label": "r006",
+        "adapter_id": 2,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 10.0
+      },
+      {
+        "label": "r007",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 11.666666666666668
+      },
+      {
+        "label": "r008",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 13.333333333333334
+      },
+      {
+        "label": "r009",
+        "adapter_id": 1,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 15.0
+      },
+      {
+        "label": "r010",
+        "adapter_id": 2,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 16.666666666666668
+      },
+      {
+        "label": "r011",
+        "adapter_id": 3,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 18.333333333333336
+      },
+      {
+        "label": "r012",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 20.0
+      },
+      {
+        "label": "r013",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 21.666666666666668
+      },
+      {
+        "label": "r014",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 23.333333333333336
+      },
+      {
+        "label": "r015",
+        "adapter_id": 3,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 25.0
+      },
+      {
+        "label": "r016",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 26.666666666666668
+      },
+      {
+        "label": "r017",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 28.333333333333336
+      },
+      {
+        "label": "r018",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 30.0
+      },
+      {
+        "label": "r019",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 31.666666666666668
+      },
+      {
+        "label": "r020",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 33.333333333333336
+      },
+      {
+        "label": "r021",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 35.0
+      },
+      {
+        "label": "r022",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 36.66666666666667
+      },
+      {
+        "label": "r023",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 38.333333333333336
+      }
+    ],
+    [
+      {
+        "label": "r000",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 0.0
+      },
+      {
+        "label": "r001",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 1.1111111111111112
+      },
+      {
+        "label": "r002",
+        "adapter_id": 2,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 2.2222222222222223
+      },
+      {
+        "label": "r003",
+        "adapter_id": 3,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 3.333333333333333
+      },
+      {
+        "label": "r004",
+        "adapter_id": 0,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 4.444444444444445
+      },
+      {
+        "label": "r005",
+        "adapter_id": 1,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 5.555555555555555
+      },
+      {
+        "label": "r006",
+        "adapter_id": 2,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 6.666666666666666
+      },
+      {
+        "label": "r007",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 7.777777777777778
+      },
+      {
+        "label": "r008",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 8.88888888888889
+      },
+      {
+        "label": "r009",
+        "adapter_id": 1,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 10.0
+      },
+      {
+        "label": "r010",
+        "adapter_id": 2,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 11.11111111111111
+      },
+      {
+        "label": "r011",
+        "adapter_id": 3,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 12.222222222222221
+      },
+      {
+        "label": "r012",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 13.333333333333332
+      },
+      {
+        "label": "r013",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 14.444444444444445
+      },
+      {
+        "label": "r014",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 15.555555555555555
+      },
+      {
+        "label": "r015",
+        "adapter_id": 3,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 16.666666666666668
+      },
+      {
+        "label": "r016",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 17.77777777777778
+      },
+      {
+        "label": "r017",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 18.88888888888889
+      },
+      {
+        "label": "r018",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 20.0
+      },
+      {
+        "label": "r019",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 21.11111111111111
+      },
+      {
+        "label": "r020",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 22.22222222222222
+      },
+      {
+        "label": "r021",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 23.333333333333332
+      },
+      {
+        "label": "r022",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 24.444444444444443
+      },
+      {
+        "label": "r023",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 25.555555555555554
+      }
+    ],
+    [
+      {
+        "label": "r000",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 0.0
+      },
+      {
+        "label": "r001",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 3.3333333333333335
+      },
+      {
+        "label": "r002",
+        "adapter_id": 2,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 6.666666666666667
+      },
+      {
+        "label": "r003",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 10.0
+      },
+      {
+        "label": "r004",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 13.333333333333334
+      },
+      {
+        "label": "r005",
+        "adapter_id": 1,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 16.666666666666668
+      },
+      {
+        "label": "r006",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 20.0
+      },
+      {
+        "label": "r007",
+        "adapter_id": 3,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 23.333333333333336
+      },
+      {
+        "label": "r008",
+        "adapter_id": 0,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 26.666666666666668
+      },
+      {
+        "label": "r009",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 30.0
+      },
+      {
+        "label": "r010",
+        "adapter_id": 2,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 33.333333333333336
+      },
+      {
+        "label": "r011",
+        "adapter_id": 3,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 36.66666666666667
+      },
+      {
+        "label": "r012",
+        "adapter_id": 0,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 40.0
+      },
+      {
+        "label": "r013",
+        "adapter_id": 1,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 43.333333333333336
+      },
+      {
+        "label": "r014",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 46.66666666666667
+      },
+      {
+        "label": "r015",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 50.0
+      },
+      {
+        "label": "r016",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 53.333333333333336
+      },
+      {
+        "label": "r017",
+        "adapter_id": 1,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 56.66666666666667
+      },
+      {
+        "label": "r018",
+        "adapter_id": 2,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 60.0
+      },
+      {
+        "label": "r019",
+        "adapter_id": 3,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 63.333333333333336
+      },
+      {
+        "label": "r020",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 66.66666666666667
+      },
+      {
+        "label": "r021",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 70.0
+      },
+      {
+        "label": "r022",
+        "adapter_id": 2,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 73.33333333333334
+      },
+      {
+        "label": "r023",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 76.66666666666667
+      }
+    ],
+    [
+      {
+        "label": "r000",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 0.0
+      },
+      {
+        "label": "r001",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 1.6666666666666667
+      },
+      {
+        "label": "r002",
+        "adapter_id": 2,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 3.3333333333333335
+      },
+      {
+        "label": "r003",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 5.0
+      },
+      {
+        "label": "r004",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 6.666666666666667
+      },
+      {
+        "label": "r005",
+        "adapter_id": 1,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 8.333333333333334
+      },
+      {
+        "label": "r006",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 10.0
+      },
+      {
+        "label": "r007",
+        "adapter_id": 3,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 11.666666666666668
+      },
+      {
+        "label": "r008",
+        "adapter_id": 0,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 13.333333333333334
+      },
+      {
+        "label": "r009",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 15.0
+      },
+      {
+        "label": "r010",
+        "adapter_id": 2,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 16.666666666666668
+      },
+      {
+        "label": "r011",
+        "adapter_id": 3,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 18.333333333333336
+      },
+      {
+        "label": "r012",
+        "adapter_id": 0,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 20.0
+      },
+      {
+        "label": "r013",
+        "adapter_id": 1,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 21.666666666666668
+      },
+      {
+        "label": "r014",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 23.333333333333336
+      },
+      {
+        "label": "r015",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 25.0
+      },
+      {
+        "label": "r016",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 26.666666666666668
+      },
+      {
+        "label": "r017",
+        "adapter_id": 1,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 28.333333333333336
+      },
+      {
+        "label": "r018",
+        "adapter_id": 2,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 30.0
+      },
+      {
+        "label": "r019",
+        "adapter_id": 3,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 31.666666666666668
+      },
+      {
+        "label": "r020",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 33.333333333333336
+      },
+      {
+        "label": "r021",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 35.0
+      },
+      {
+        "label": "r022",
+        "adapter_id": 2,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 36.66666666666667
+      },
+      {
+        "label": "r023",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 38.333333333333336
+      }
+    ],
+    [
+      {
+        "label": "r000",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 0.0
+      },
+      {
+        "label": "r001",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 1.1111111111111112
+      },
+      {
+        "label": "r002",
+        "adapter_id": 2,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 2.2222222222222223
+      },
+      {
+        "label": "r003",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 3.333333333333333
+      },
+      {
+        "label": "r004",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 4.444444444444445
+      },
+      {
+        "label": "r005",
+        "adapter_id": 1,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 5.555555555555555
+      },
+      {
+        "label": "r006",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 6.666666666666666
+      },
+      {
+        "label": "r007",
+        "adapter_id": 3,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 7.777777777777778
+      },
+      {
+        "label": "r008",
+        "adapter_id": 0,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 8.88888888888889
+      },
+      {
+        "label": "r009",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 10.0
+      },
+      {
+        "label": "r010",
+        "adapter_id": 2,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 11.11111111111111
+      },
+      {
+        "label": "r011",
+        "adapter_id": 3,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 12.222222222222221
+      },
+      {
+        "label": "r012",
+        "adapter_id": 0,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 13.333333333333332
+      },
+      {
+        "label": "r013",
+        "adapter_id": 1,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 14.444444444444445
+      },
+      {
+        "label": "r014",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 15.555555555555555
+      },
+      {
+        "label": "r015",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 16.666666666666668
+      },
+      {
+        "label": "r016",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 17.77777777777778
+      },
+      {
+        "label": "r017",
+        "adapter_id": 1,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 18.88888888888889
+      },
+      {
+        "label": "r018",
+        "adapter_id": 2,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 20.0
+      },
+      {
+        "label": "r019",
+        "adapter_id": 3,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 21.11111111111111
+      },
+      {
+        "label": "r020",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 22.22222222222222
+      },
+      {
+        "label": "r021",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 23.333333333333332
+      },
+      {
+        "label": "r022",
+        "adapter_id": 2,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 24.444444444444443
+      },
+      {
+        "label": "r023",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 25.555555555555554
+      }
+    ],
+    [
+      {
+        "label": "r000",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 0.0
+      },
+      {
+        "label": "r001",
+        "adapter_id": 1,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 3.3333333333333335
+      },
+      {
+        "label": "r002",
+        "adapter_id": 2,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 6.666666666666667
+      },
+      {
+        "label": "r003",
+        "adapter_id": 3,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 10.0
+      },
+      {
+        "label": "r004",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 13.333333333333334
+      },
+      {
+        "label": "r005",
+        "adapter_id": 1,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 16.666666666666668
+      },
+      {
+        "label": "r006",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 20.0
+      },
+      {
+        "label": "r007",
+        "adapter_id": 3,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 23.333333333333336
+      },
+      {
+        "label": "r008",
+        "adapter_id": 0,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 26.666666666666668
+      },
+      {
+        "label": "r009",
+        "adapter_id": 1,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 30.0
+      },
+      {
+        "label": "r010",
+        "adapter_id": 2,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 33.333333333333336
+      },
+      {
+        "label": "r011",
+        "adapter_id": 3,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 36.66666666666667
+      },
+      {
+        "label": "r012",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 40.0
+      },
+      {
+        "label": "r013",
+        "adapter_id": 1,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 43.333333333333336
+      },
+      {
+        "label": "r014",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 46.66666666666667
+      },
+      {
+        "label": "r015",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 50.0
+      },
+      {
+        "label": "r016",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 53.333333333333336
+      },
+      {
+        "label": "r017",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 56.66666666666667
+      },
+      {
+        "label": "r018",
+        "adapter_id": 2,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 60.0
+      },
+      {
+        "label": "r019",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 63.333333333333336
+      },
+      {
+        "label": "r020",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 66.66666666666667
+      },
+      {
+        "label": "r021",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 70.0
+      },
+      {
+        "label": "r022",
+        "adapter_id": 2,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 73.33333333333334
+      },
+      {
+        "label": "r023",
+        "adapter_id": 3,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 76.66666666666667
+      }
+    ],
+    [
+      {
+        "label": "r000",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 0.0
+      },
+      {
+        "label": "r001",
+        "adapter_id": 1,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 1.6666666666666667
+      },
+      {
+        "label": "r002",
+        "adapter_id": 2,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 3.3333333333333335
+      },
+      {
+        "label": "r003",
+        "adapter_id": 3,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 5.0
+      },
+      {
+        "label": "r004",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 6.666666666666667
+      },
+      {
+        "label": "r005",
+        "adapter_id": 1,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 8.333333333333334
+      },
+      {
+        "label": "r006",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 10.0
+      },
+      {
+        "label": "r007",
+        "adapter_id": 3,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 11.666666666666668
+      },
+      {
+        "label": "r008",
+        "adapter_id": 0,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 13.333333333333334
+      },
+      {
+        "label": "r009",
+        "adapter_id": 1,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 15.0
+      },
+      {
+        "label": "r010",
+        "adapter_id": 2,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 16.666666666666668
+      },
+      {
+        "label": "r011",
+        "adapter_id": 3,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 18.333333333333336
+      },
+      {
+        "label": "r012",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 20.0
+      },
+      {
+        "label": "r013",
+        "adapter_id": 1,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 21.666666666666668
+      },
+      {
+        "label": "r014",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 23.333333333333336
+      },
+      {
+        "label": "r015",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 25.0
+      },
+      {
+        "label": "r016",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 26.666666666666668
+      },
+      {
+        "label": "r017",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 28.333333333333336
+      },
+      {
+        "label": "r018",
+        "adapter_id": 2,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 30.0
+      },
+      {
+        "label": "r019",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 31.666666666666668
+      },
+      {
+        "label": "r020",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 33.333333333333336
+      },
+      {
+        "label": "r021",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 35.0
+      },
+      {
+        "label": "r022",
+        "adapter_id": 2,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 36.66666666666667
+      },
+      {
+        "label": "r023",
+        "adapter_id": 3,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 38.333333333333336
+      }
+    ],
+    [
+      {
+        "label": "r000",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 0.0
+      },
+      {
+        "label": "r001",
+        "adapter_id": 1,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 1.1111111111111112
+      },
+      {
+        "label": "r002",
+        "adapter_id": 2,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 2.2222222222222223
+      },
+      {
+        "label": "r003",
+        "adapter_id": 3,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 3.333333333333333
+      },
+      {
+        "label": "r004",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 4.444444444444445
+      },
+      {
+        "label": "r005",
+        "adapter_id": 1,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 5.555555555555555
+      },
+      {
+        "label": "r006",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 6.666666666666666
+      },
+      {
+        "label": "r007",
+        "adapter_id": 3,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 7.777777777777778
+      },
+      {
+        "label": "r008",
+        "adapter_id": 0,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 8.88888888888889
+      },
+      {
+        "label": "r009",
+        "adapter_id": 1,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 10.0
+      },
+      {
+        "label": "r010",
+        "adapter_id": 2,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 11.11111111111111
+      },
+      {
+        "label": "r011",
+        "adapter_id": 3,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 12.222222222222221
+      },
+      {
+        "label": "r012",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 13.333333333333332
+      },
+      {
+        "label": "r013",
+        "adapter_id": 1,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 14.444444444444445
+      },
+      {
+        "label": "r014",
+        "adapter_id": 2,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 15.555555555555555
+      },
+      {
+        "label": "r015",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 16.666666666666668
+      },
+      {
+        "label": "r016",
+        "adapter_id": 0,
+        "input_tokens": 16,
+        "n_predict": 32,
+        "offset_s": 17.77777777777778
+      },
+      {
+        "label": "r017",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 18.88888888888889
+      },
+      {
+        "label": "r018",
+        "adapter_id": 2,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 20.0
+      },
+      {
+        "label": "r019",
+        "adapter_id": 3,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 21.11111111111111
+      },
+      {
+        "label": "r020",
+        "adapter_id": 0,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 22.22222222222222
+      },
+      {
+        "label": "r021",
+        "adapter_id": 1,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 23.333333333333332
+      },
+      {
+        "label": "r022",
+        "adapter_id": 2,
+        "input_tokens": 128,
+        "n_predict": 32,
+        "offset_s": 24.444444444444443
+      },
+      {
+        "label": "r023",
+        "adapter_id": 3,
+        "input_tokens": 256,
+        "n_predict": 32,
+        "offset_s": 25.555555555555554
+      }
+    ]
+  ],
+  "arrivals": {
+    "single": [
+      [
+        27
+      ],
+      [
+        1
+      ],
+      [
+        4
+      ],
+      [
+        1
+      ],
+      [
+        3
+      ],
+      [
+        36
+      ],
+      [
+        34
+      ],
+      [
+        43
+      ],
+      [
+        5
+      ],
+      [
+        15
+      ],
+      [
+        26
+      ],
+      [
+        4
+      ],
+      [
+        11
+      ],
+      [
+        15
+      ],
+      [
+        36
+      ],
+      [
+        36
+      ],
+      [
+        15
+      ],
+      [
+        5
+      ],
+      [
+        39
+      ],
+      [
+        35
+      ],
+      [
+        42
+      ],
+      [
+        21
+      ],
+      [
+        28
+      ],
+      [
+        8
+      ],
+      [
+        48
+      ],
+      [
+        35
+      ],
+      [
+        9
+      ],
+      [
+        6
+      ],
+      [
+        22
+      ],
+      [
+        18
+      ]
+    ],
+    "repeated": [
+      [
+        2,
+        10,
+        24,
+        33,
+        43,
+        53
+      ],
+      [
+        3,
+        13,
+        23,
+        34,
+        42,
+        50
+      ],
+      [
+        1,
+        9,
+        17,
+        26,
+        38,
+        47
+      ],
+      [
+        3,
+        12,
+        23,
+        31,
+        39,
+        48
+      ],
+      [
+        3,
+        12,
+        23,
+        35,
+        43,
+        53
+      ],
+      [
+        2,
+        11,
+        23,
+        33,
+        41,
+        53
+      ],
+      [
+        2,
+        13,
+        21,
+        32,
+        44,
+        52
+      ],
+      [
+        2,
+        10,
+        20,
+        28,
+        44,
+        52
+      ],
+      [
+        4,
+        13,
+        24,
+        35,
+        44,
+        52
+      ],
+      [
+        2,
+        10,
+        23,
+        31,
+        41,
+        53
+      ],
+      [
+        1,
+        10,
+        18,
+        26,
+        34,
+        46
+      ],
+      [
+        1,
+        10,
+        23,
+        33,
+        43,
+        51
+      ],
+      [
+        1,
+        15,
+        24,
+        35,
+        44,
+        53
+      ],
+      [
+        1,
+        9,
+        17,
+        25,
+        36,
+        50
+      ],
+      [
+        1,
+        11,
+        20,
+        28,
+        36,
+        49
+      ],
+      [
+        4,
+        13,
+        24,
+        32,
+        40,
+        53
+      ],
+      [
+        3,
+        13,
+        22,
+        30,
+        42,
+        52
+      ],
+      [
+        1,
+        9,
+        18,
+        32,
+        41,
+        53
+      ],
+      [
+        1,
+        14,
+        23,
+        32,
+        41,
+        49
+      ],
+      [
+        6,
+        14,
+        24,
+        32,
+        40,
+        50
+      ],
+      [
+        1,
+        13,
+        21,
+        32,
+        43,
+        53
+      ],
+      [
+        3,
+        11,
+        19,
+        35,
+        44,
+        52
+      ],
+      [
+        1,
+        9,
+        18,
+        28,
+        37,
+        50
+      ],
+      [
+        2,
+        11,
+        21,
+        31,
+        41,
+        51
+      ],
+      [
+        1,
+        10,
+        20,
+        31,
+        43,
+        51
+      ],
+      [
+        1,
+        16,
+        26,
+        35,
+        43,
+        51
+      ],
+      [
+        1,
+        13,
+        21,
+        30,
+        40,
+        52
+      ],
+      [
+        1,
+        13,
+        23,
+        33,
+        43,
+        53
+      ],
+      [
+        3,
+        13,
+        24,
+        32,
+        40,
+        53
+      ],
+      [
+        1,
+        11,
+        25,
+        37,
+        45,
+        53
+      ]
+    ],
+    "motivation-repeated": [
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ],
+      [
+        12,
+        20,
+        28,
+        36,
+        44,
+        52
+      ]
+    ]
+  }
+}
