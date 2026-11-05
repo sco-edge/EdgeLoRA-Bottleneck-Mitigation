@@ -41,3 +41,23 @@ confidence interval. Compare like units before calculating changes.
 `max_tbt_ms` is `null` for a one-token request because no token pair exists.
 This is not zero delay. The client uses monotonic timestamps; they are not
 calendar times and should not be aligned across different machine clocks.
+
+## Matched repetitions and incomplete comparisons
+
+```bash
+python experiments/summarize.py results/throughput --require-blocks 0 1 2
+```
+
+This optional gate requires exactly those blocks in every observed group.
+It does not prove that all twelve mode/rate groups exist; compare the observed
+group set with the planned 36 runs. Invalid and interrupted runs remain listed
+separately even if successful replacement runs satisfy the block requirement.
+
+A duplicate block in one configuration raises an error. Keep alternate attempts
+outside the aggregation root, or select one attempt per block in a new analysis
+directory while preserving all originals. Document the replacement criterion.
+Do not select attempts by which result looks faster.
+
+For a paired percentage, match block and condition first, compute each pair's
+change, then apply the intended aggregation. The median of paired percentages
+need not equal the percentage change between separately computed medians.
