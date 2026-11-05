@@ -118,6 +118,12 @@ curl http://127.0.0.1:8080/completion \
 
 This is an API smoke example. Use the controlled workloads in [Experiments](docs/experiments.md) for comparisons.
 
+## Recorded results
+
+![Four serving variants compared by throughput and request completion time at three offered loads.](docs/figures/serving.png)
+
+These are the published CSV measurements, redrawn for this repository. Points are medians over three runs; bars show the minimum and maximum. Each run has 24 requests. Completion time is averaged within each run before taking the median. Higher throughput and lower completion time are preferable. These finite traces do not establish steady-state capacity or output equivalence. [Source CSV](experiments/paper_results/serving.csv) · [Vector figure](docs/figures/serving.svg)
+
 ## Reproduce and interpret the experiments
 
 The [experiment guide](docs/experiments.md) maps the manuscript's figures and tables to workloads, preserved source, and analysis. It also distinguishes the original measurements from release-time portability changes.
