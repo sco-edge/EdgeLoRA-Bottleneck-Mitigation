@@ -95,6 +95,8 @@ def main():
         return subprocess.call(command, cwd=ROOT, env=env)
     except KeyboardInterrupt:
         return 130
+    except OSError as exc:
+        parser.error(f"Cannot execute server {command[0]}: {exc}")
 
 
 if __name__ == "__main__":
