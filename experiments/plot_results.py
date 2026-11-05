@@ -37,6 +37,9 @@ def finish(fig, out, name, caption):
         ax.set_ylim(bottom=0)
     fig.savefig(out/f'{name}.png',dpi=180,facecolor='white')
     fig.savefig(out/f'{name}.svg',facecolor='white',metadata={'Date':None})
+    svg = out/f'{name}.svg'
+    svg.write_text('\n'.join(line.rstrip() for line in svg.read_text(encoding='utf-8').splitlines()) + '\n',
+                   encoding='utf-8', newline='\n')
     plt.close(fig)
 
 def serving(out):
@@ -84,7 +87,21 @@ def ablation(out):
     fig.legend(*axes[0].get_legend_handles_labels(),loc='upper center',bbox_to_anchor=(.5,.91),ncol=4,frameon=False)
     finish(fig,out,'ablation','One ongoing request; 2 slots; cache 2; adapter files warm. Lower is better.\nMedian of 12 matched runs; CSV contains no dispersion. Same vertical scale in both panels.')
 
-PLOTS = {'serving': serving, 'latency': latency, 'ablation': ablation}
+def motivation(out):
+    data = rows('motivation.csv')
+    fig,axes = plt.subplots(1,2,figsize=(11.5,4.7))
+    left = [number(one(data,panel='a',condition=c),'median') for c in ('resident','sync loading')]
+    bars = axes[0].bar(['Resident','Synchronous loading'],left,color=[COLORS[0],COLORS[1]],width=.55)
+    axes[0].bar_label(bars,fmt='%.1f ms',padding=4)
+    axes[0].set(title='Loading-related decode stall',ylabel='Max TBT (ms)',ylim=(0,650))
+    right = [number(one(data,panel='b',condition=str(n)),'median') for n in (16,128,256)]
+    bars = axes[1].bar(['16','128','256'],right,color=COLORS[2],width=.55)
+    axes[1].bar_label(bars,fmt='%.2f%%',padding=4)
+    axes[1].set(title='Accumulation share of kernel-duration sums',ylabel='Percent of total kernel-duration sum',xlabel='Incoming input tokens',ylim=(0,100))
+    fig.suptitle('Two measured sources of serving delay',fontsize=16,y=.98)
+    finish(fig,out,'motivation','Left: baseline, 30 runs. Right: 6 profiled runs/length, both adapters resident, CUDA Graphs disabled.\nDifferent experiments and units; kernel-duration shares are not wall-time fractions or measured bandwidth.')
+
+PLOTS = {'serving': serving, 'latency': latency, 'ablation': ablation, 'motivation': motivation}
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

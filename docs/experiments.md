@@ -123,6 +123,12 @@ python experiments/profiling/analyze_traces.py PROFILE_RESULTS
 
 The analysis writes `analysis-traces.json` plus per-trace analysis files under that result directory. It requires the original `LCP/MEASURE/` and `LCP/NODE/` NVTX labels; an arbitrary server trace is not interchangeable.
 
+### Recorded bottleneck measurements
+
+![Loading raises observed Max TBT; accumulation consumes a larger kernel-duration share at longer inputs.](figures/motivation.png)
+
+The left panel compares baseline loading conditions. The right panel is a separate instrumented diagnostic, with both adapters resident and CUDA Graphs disabled. Their units and measurement procedures differ; the percentages cannot be added to wall-clock latency or interpreted as DRAM bandwidth. [CSV](../experiments/paper_results/motivation.csv) · [SVG](figures/motivation.svg)
+
 ## Recorded evidence and limits
 
 | Paper output | Original experiment directory |
