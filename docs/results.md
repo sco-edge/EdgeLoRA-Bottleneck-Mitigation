@@ -20,3 +20,24 @@ A forcefully terminated process may leave no summary. The aggregator exposes
 such directories under `incomplete_runs` when `config.json` exists. Runs with
 `valid=false` appear under `invalid_runs`. A failure may occur before later
 files in the table are written, so their absence is not proof of deletion.
+
+## Metric units and aggregation
+
+| Metric | Unit | Definition |
+| --- | --- | --- |
+| `throughput_rps` | requests/s | 24 divided by first actual start to last end |
+| `mean_latency_s` | seconds | Mean client completion time across 24 requests |
+| `mean_ttft_s` | seconds | Mean time to first nonempty text event |
+| `slo_percent` | percent | Fraction of requests with TTFT <= 6 seconds |
+| `mean_per_request_max_tbt_ms` | milliseconds | Mean of ongoing requests' individual server-token maximum gaps |
+| `mean_ongoing_completion_ms` | milliseconds | Mean completion time of ongoing requests |
+| `mean_incoming_ttft_ms` | milliseconds | Mean TTFT of incoming requests |
+
+The summary tool aggregates top-level numeric metrics over runs using median,
+minimum and maximum. Nested `per_request` data remains in each raw summary.
+It does not pool all request latencies into a single median or estimate a
+confidence interval. Compare like units before calculating changes.
+
+`max_tbt_ms` is `null` for a one-token request because no token pair exists.
+This is not zero delay. The client uses monotonic timestamps; they are not
+calendar times and should not be aligned across different machine clocks.
