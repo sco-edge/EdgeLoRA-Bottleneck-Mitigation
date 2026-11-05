@@ -19,8 +19,8 @@ and intermediate checkpoints are excluded.
 | `adapter-training/download_secucoder.py` | Download the recorded SecuCoder revision in the dataset-on-disk format expected by its preparation script |
 | `adapter-training/cross_profile_task_adapters.py` | Evaluate each prompt with all six adapters to construct router labels |
 | `adapter-training/evaluate_task_adapter.py` | Generation and task-specific scoring used by cross-profiling |
-| `adapter-router/prepare_six_label_router_full_v2.py` | Freeze the recorded training/validation profile groups |
-| `adapter-router/train_six_label_router_smoke.py` | Train the router; despite its historical filename, this also ran the full 3,410-step model |
+| `adapter-router/prepare_router_full_dataset.py` | Freeze the recorded training/validation profile groups |
+| `adapter-router/train_router.py` | Train the six-label router, including the recorded full 3,410-step run |
 | `convert_deployment_artifacts.py` | Export task/router GGUF files and the separate router classifier |
 | `configs/` | Recorded settings, input fingerprints, and model/dataset provenance |
 
@@ -174,7 +174,7 @@ To replay training with the prepared dataset, set `ROUTER_DATA` to a directory
 containing `train.jsonl`, `validation.jsonl`, `stats.json`, and `manifest.json`:
 
 ```bash
-python training/adapter-router/train_six_label_router_smoke.py \
+python training/adapter-router/train_router.py \
   --base-model "$BASE_MODEL" --data-dir "$ROUTER_DATA" \
   --output-dir training/adapter-router/trained_models/six_label_router_full_v2_e10_v1 \
   --max-steps 3410 --train-samples 1364 --validation-samples 302 \
@@ -253,3 +253,15 @@ wrapper is new release plumbing based on the archived export procedure.
 The task trainer, evaluator, and cross-profiler add a `--model` option for a
 local pinned snapshot. Their training, generation, and scoring logic is
 unchanged. Other included training sources retain their recorded logic.
+
+## Script name migration
+
+The router entry points now use names that describe their role. Their Python contents and training behavior are unchanged.
+
+| Archived filename | Current filename |
+| --- | --- |
+| train_six_label_router_smoke.py | train_router.py |
+| prepare_six_label_router_full_v2.py | prepare_router_full_dataset.py |
+| prepare_six_label_router_profile_groups.py | prepare_router_profile_groups.py |
+
+The original filenames in configs/provenance.json identify the archived source files and are intentionally retained. Use the current filenames for commands in this checkout.
