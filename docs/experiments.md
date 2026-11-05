@@ -88,6 +88,12 @@ Max TBT is computed from consecutive **server token-generation timestamps** in `
 
 Both panels use seconds; lower values are preferable. `A2 / 128` means two ongoing requests and a 128-token incoming request. Fanout uses cold adapter files, while Repeat 6 uses warm files and a two-entry task cache. The CSV supplies medians, so no uncertainty bars are invented. The incoming TTFT panel includes the A4 / 16 condition where Combined is slower. Output differences remain unresolved. [CSV](../experiments/paper_results/latency.csv) · [SVG](figures/latency.svg)
 
+### Recorded four-variant ablation
+
+![Four variants compared with resident and nonresident adapters at 16, 128 and 256 incoming tokens.](figures/ablation.png)
+
+The panels share the same scale and show median ongoing Max TBT over 12 matched runs. `R` and `M` in the source CSV mean resident and nonresident runtime adapters; both use warm OS file pages. This plot isolates the two implementation choices under the measured workload. [CSV](../experiments/paper_results/latency.csv) · [SVG](figures/ablation.svg)
+
 ### Cold adapter-file reads
 
 Cold runs require the original loader-entry page-residency observer. It checks the specific adapter file immediately before `fopen`; it does not clear the system-wide cache.

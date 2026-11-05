@@ -72,7 +72,19 @@ def latency(out):
     fig.legend(*axes[0].get_legend_handles_labels(),loc='upper center',bbox_to_anchor=(.5,.91),ncol=2,frameon=False)
     finish(fig,out,'latency','A2/A4: 2/4 ongoing requests; suffix: incoming input tokens, cold adapter file. Repeat 6: warm file, cache 2.\nMedians over 30 runs. Fanout Max TBT averages per-request maxima within each run. Dispersion is not in the CSV.')
 
-PLOTS = {'serving': serving, 'latency': latency}
+def ablation(out):
+    data = rows('latency.csv')
+    fig, axes = plt.subplots(1,2,figsize=(11.5,4.8))
+    for ax,state,title in zip(axes,['R','M'],['Resident task adapter','Nonresident task adapter; warm file']):
+        for index,label in enumerate(MODES):
+            y = [number(one(data,experiment='ablation',condition=f'{n} {state}',metric='A Max TBT',configuration=label),'median_ms')/1000 for n in (16,128,256)]
+            ax.bar([i+(index-1.5)*.19 for i in range(3)],y,width=.19,color=COLORS[index],label=label)
+        ax.set(title=title,ylabel='Ongoing Max TBT (seconds)',xlabel='Incoming input tokens',xticks=range(3),xticklabels=['16','128','256'],ylim=(0,9))
+    fig.suptitle('Separating adapter preparation and accumulation costs',fontsize=16,y=.98)
+    fig.legend(*axes[0].get_legend_handles_labels(),loc='upper center',bbox_to_anchor=(.5,.91),ncol=4,frameon=False)
+    finish(fig,out,'ablation','One ongoing request; 2 slots; cache 2; adapter files warm. Lower is better.\nMedian of 12 matched runs; CSV contains no dispersion. Same vertical scale in both panels.')
+
+PLOTS = {'serving': serving, 'latency': latency, 'ablation': ablation}
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
