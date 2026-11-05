@@ -49,6 +49,10 @@ docs/          Experiment mapping, provenance, and limitations
 licenses/      Preserved third-party license texts
 ```
 
+For detailed configuration, troubleshooting, result formats and verification,
+use the [documentation map](docs/README.md). Contributors can start with
+[CPU checks and contribution guidance](CONTRIBUTING.md).
+
 ## Hardware and model
 
 | Role | Recorded setup |

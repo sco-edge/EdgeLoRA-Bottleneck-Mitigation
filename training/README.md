@@ -265,3 +265,9 @@ The router entry points now use names that describe their role. Their Python con
 | prepare_six_label_router_profile_groups.py | prepare_router_profile_groups.py |
 
 The original filenames in configs/provenance.json identify the archived source files and are intentionally retained. Use the current filenames for commands in this checkout.
+
+## Detailed references
+
+- [Prepared task-data schema](data-layout.md): JSONL layout and assistant-only masking.
+- [Router profile contracts](router-profiles.md): sampling, completed profiles and held-out groups.
+- [Export and transfer verification](export.md): checkpoint inputs, partial failures and checksums.
