@@ -27,25 +27,21 @@ class SummaryTests(unittest.TestCase):
         self.run_record('rerun',0,3)
         with self.assertRaisesRegex(ValueError,'Duplicate block'): summarize.aggregate(self.root)
 
-def test_nonfinite_values_rejected(self):
-    self.run_record('bad',0,float('nan'))
-    with self.assertRaisesRegex(ValueError,'invalid numeric'): summarize.aggregate(self.root)
-SummaryTests.test_nonfinite_values_rejected = test_nonfinite_values_rejected
-def test_metric_schema_mismatch(self):
-    self.run_record('one',0,1)
-    p = self.run_record('two',1,2)
-    (p/'summary.json').write_text(json.dumps(dict(valid=True,metrics=dict(other=3))))
-    with self.assertRaisesRegex(ValueError,'Inconsistent numeric'): summarize.aggregate(self.root)
-SummaryTests.test_metric_schema_mismatch = test_metric_schema_mismatch
+    def test_nonfinite_values_rejected(self):
+        self.run_record('bad',0,float('nan'))
+        with self.assertRaisesRegex(ValueError,'invalid numeric'): summarize.aggregate(self.root)
+    def test_metric_schema_mismatch(self):
+        self.run_record('one',0,1)
+        p = self.run_record('two',1,2)
+        (p/'summary.json').write_text(json.dumps(dict(valid=True,metrics=dict(other=3))))
+        with self.assertRaisesRegex(ValueError,'Inconsistent numeric'): summarize.aggregate(self.root)
 
-def test_interrupted_run_is_visible(self):
-    p = self.run_record('interrupted',0,2)
-    (p/'summary.json').unlink()
-    self.assertEqual(summarize.aggregate(self.root)['incomplete_runs'], ['interrupted'])
-SummaryTests.test_interrupted_run_is_visible = test_interrupted_run_is_visible
+    def test_interrupted_run_is_visible(self):
+        p = self.run_record('interrupted',0,2)
+        (p/'summary.json').unlink()
+        self.assertEqual(summarize.aggregate(self.root)['incomplete_runs'], ['interrupted'])
 
-def test_required_blocks(self):
-    self.run_record('one',0,2)
-    with self.assertRaisesRegex(ValueError,'Incomplete block'): summarize.aggregate(self.root,[0,1,2])
-    self.assertEqual(summarize.aggregate(self.root,[0])['groups'][0]['n'],1)
-SummaryTests.test_required_blocks = test_required_blocks
+    def test_required_blocks(self):
+        self.run_record('one',0,2)
+        with self.assertRaisesRegex(ValueError,'Incomplete block'): summarize.aggregate(self.root,[0,1,2])
+        self.assertEqual(summarize.aggregate(self.root,[0])['groups'][0]['n'],1)
