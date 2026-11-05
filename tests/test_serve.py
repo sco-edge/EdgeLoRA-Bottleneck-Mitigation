@@ -22,3 +22,13 @@ def test_invalid_paths_fail_before_launch(self):
             serve.make_command(config, 'baseline', '127.0.0.1', 8080)
 
 ServeTests.test_invalid_paths_fail_before_launch = test_invalid_paths_fail_before_launch
+
+def test_invalid_numbers(self):
+    for key in ('context_size', 'batch_size', 'micro_batch_size', 'parallel_slots', 'threads', 'adapter_cache_size'):
+        for value in (0, -1, True, 1.5, '2'):
+            config = dict(self.config, **{key:value})
+            with self.subTest(key=key,value=value), self.assertRaises(ValueError):
+                serve.make_command(config, 'baseline','localhost',8080)
+    for port in (0,65536,True):
+        with self.assertRaises(ValueError): serve.make_command(self.config,'baseline','localhost',port)
+ServeTests.test_invalid_numbers = test_invalid_numbers

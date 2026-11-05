@@ -22,6 +22,15 @@ def make_command(config, mode, host, port):
     for key in ("binary", "base_model", "router_adapter", "router_classifier"):
         if not isinstance(config.get(key), str) or not config[key].strip():
             raise ValueError(f"{key} must be a nonempty path string.")
+    if mode not in MODES:
+        raise ValueError(f"Unknown mode: {mode}")
+    if type(port) is not int or not 1 <= port <= 65535:
+        raise ValueError("port must be an integer from 1 to 65535.")
+    for key in ("context_size", "batch_size", "micro_batch_size", "parallel_slots", "threads", "adapter_cache_size"):
+        if key in config and (type(config[key]) is not int or config[key] <= 0):
+            raise ValueError(f"{key} must be a positive integer.")
+    if "gpu_layers" in config and (type(config["gpu_layers"]) is not int or config["gpu_layers"] < 0):
+        raise ValueError("gpu_layers must be a nonnegative integer.")
     tasks = config.get("task_adapters")
     if not isinstance(tasks, list) or any(not isinstance(p, str) or not p.strip() for p in tasks):
         raise ValueError("task_adapters must be a list of six nonempty path strings.")
