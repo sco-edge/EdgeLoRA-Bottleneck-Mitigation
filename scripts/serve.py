@@ -67,8 +67,11 @@ def main():
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--dry-run", action="store_true", help="Print command without starting a server.")
     args = parser.parse_args()
-    config = json.loads(args.config.read_text(encoding="utf-8"))
-    command, flags, policy, files = make_command(config, args.mode, args.host, args.port)
+    try:
+        config = json.loads(args.config.read_text(encoding="utf-8"))
+        command, flags, policy, files = make_command(config, args.mode, args.host, args.port)
+    except (OSError, ValueError) as exc:
+        parser.error(f"Cannot load runtime config {args.config}: {exc}")
     print(json.dumps({"mode": args.mode, "argv": command, "environment": flags,
                       "required_request_field": {"adapter_load_policy": policy}}, indent=2), flush=True)
     if args.dry_run:
