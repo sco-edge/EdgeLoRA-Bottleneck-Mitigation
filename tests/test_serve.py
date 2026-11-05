@@ -13,3 +13,12 @@ class ServeTests(unittest.TestCase):
                 actual = serve.make_command(self.config, mode, '127.0.0.1', 8080)[:3]
                 normalized = json.loads(json.dumps(actual).replace(str(ROOT).replace('\\', '\\\\'), '<ROOT>'))
                 self.assertEqual(normalized, expected[mode])
+
+def test_invalid_paths_fail_before_launch(self):
+    for key, value in [('binary', None), ('base_model', ''), ('task_adapters', 'abcdef'), ('task_adapters', [None]*6), ('slot_save_path', 3)]:
+        config = copy.deepcopy(self.config)
+        config[key] = value
+        with self.subTest(key=key, value=value), self.assertRaises(ValueError):
+            serve.make_command(config, 'baseline', '127.0.0.1', 8080)
+
+ServeTests.test_invalid_paths_fail_before_launch = test_invalid_paths_fail_before_launch

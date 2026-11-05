@@ -17,7 +17,16 @@ def make_command(config, mode, host, port):
         p = Path(value).expanduser()
         return str(p if p.is_absolute() else ROOT / p)
 
-    tasks = config["task_adapters"]
+    if not isinstance(config, dict):
+        raise ValueError("Runtime config must be a JSON object.")
+    for key in ("binary", "base_model", "router_adapter", "router_classifier"):
+        if not isinstance(config.get(key), str) or not config[key].strip():
+            raise ValueError(f"{key} must be a nonempty path string.")
+    tasks = config.get("task_adapters")
+    if not isinstance(tasks, list) or any(not isinstance(p, str) or not p.strip() for p in tasks):
+        raise ValueError("task_adapters must be a list of six nonempty path strings.")
+    if "slot_save_path" in config and (not isinstance(config["slot_save_path"], str) or not config["slot_save_path"].strip()):
+        raise ValueError("slot_save_path must be a nonempty path string.")
     if len(tasks) != 6:
         raise ValueError("Expected six task adapters in ID order 0 through 5.")
     files = [path(config[k]) for k in ("binary", "base_model", "router_adapter", "router_classifier")]
