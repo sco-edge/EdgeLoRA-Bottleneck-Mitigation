@@ -146,3 +146,19 @@ Small plotted-value CSVs are included; model weights, datasets, full response lo
 Concurrent output differences remain in the historical records. For example, Table 5 has identical outputs for all requests in 13 of 30 baseline/combined pairs; the four-ongoing-request, 128/256-token groups have zero fully identical pairs out of 30. These observations do not by themselves identify a cause, and performance measurements do not establish output equivalence or task accuracy. The portable client preserves output hashes and server token IDs for independent comparison; it does not mark such differences as resolved.
 
 Packaging changes remove historical string-replacement runners, machine-specific process guards, pre-existing-run gates and device counter paths. The source algorithms and original hashes remain documented, but full historical reproduction also depends on the original artifacts, environment, server-session order and profiling revision. No new model training or serving measurements were run while preparing this release.
+
+## Plan the throughput collection order
+
+```bash
+python experiments/plan_runs.py
+```
+
+The command prints 36 entries with `block`, `rate`, `mode` and a unique
+`run_name`. For each block it rotates the three offered rates, then rotates
+the mode order for each rate. It performs no HTTP requests or filesystem writes.
+
+For each entry, start a fresh server in that mode, run the throughput client
+with the entry's rate and block, and stop that server before the next entry.
+Use the run name under a new results directory. The planner does not automate
+server lifecycle, check available GPU memory or retry failed measurements.
+Compare collected groups with this plan before publishing aggregate results.
