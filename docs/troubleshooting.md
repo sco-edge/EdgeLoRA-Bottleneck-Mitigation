@@ -32,3 +32,19 @@ checking executable permission, target architecture and dynamic libraries.
 If Async behaves like Baseline, inspect the request's `adapter_load_policy`.
 Server startup alone cannot select asynchronous loading for an incoming request.
 Restart the server to change in-place mode and keep client/server modes aligned.
+
+## Benchmark failures
+
+| Error | What to inspect |
+| --- | --- |
+| Linux prerequisite failure | Use dry-run on Windows; execute live cache probes on the Linux serving host |
+| Missing local adapter/log | Client paths refer to its local filesystem, even when `--url` is remote |
+| Slot/cache mismatch | Match `parallel_slots` and `adapter_cache_size` to the selected case |
+| Dispatch lateness gate | Inspect client scheduling load; preserve the failed run rather than relaxing the 50 ms threshold |
+| Missing terminal response | Check HTTP/server errors and the retained raw responses |
+| Missing server token trace | Confirm the patched binary and the exact log of this server session |
+| Cold-file eviction failure | Check the measured file's page residency and loader probe; do not relabel a warm run as cold |
+
+Run into a new output directory after correcting the cause. Keep the failed
+directory for diagnosis. A retry with the same block is a replacement attempt,
+not an additional independent repetition for aggregation.
