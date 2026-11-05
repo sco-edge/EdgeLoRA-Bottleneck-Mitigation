@@ -43,3 +43,9 @@ def test_interrupted_run_is_visible(self):
     (p/'summary.json').unlink()
     self.assertEqual(summarize.aggregate(self.root)['incomplete_runs'], ['interrupted'])
 SummaryTests.test_interrupted_run_is_visible = test_interrupted_run_is_visible
+
+def test_required_blocks(self):
+    self.run_record('one',0,2)
+    with self.assertRaisesRegex(ValueError,'Incomplete block'): summarize.aggregate(self.root,[0,1,2])
+    self.assertEqual(summarize.aggregate(self.root,[0])['groups'][0]['n'],1)
+SummaryTests.test_required_blocks = test_required_blocks

@@ -8,7 +8,7 @@ from pathlib import Path
 import statistics
 
 
-def aggregate(root):
+def aggregate(root, required_blocks=None):
     groups = collections.defaultdict(list)
     failures = []
     incomplete = [str(p.parent.relative_to(root)) for p in sorted(root.rglob('config.json'))
@@ -31,6 +31,12 @@ def aggregate(root):
             if isinstance(value, bool) or (isinstance(value, (int, float)) and not math.isfinite(value)):
                 raise ValueError(f'{file}: invalid numeric metric {field}')
         groups[key].append((config['block'], metrics))
+    if required_blocks is not None:
+        if not groups:
+            raise ValueError('No valid groups found')
+        for key, records in groups.items():
+            if {r[0] for r in records} != set(required_blocks):
+                raise ValueError(f'Incomplete block set in group {key}; expected {sorted(required_blocks)}')
     result = []
     for key, records in groups.items():
         if len({r[0] for r in records}) != len(records):
@@ -51,10 +57,15 @@ def aggregate(root):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('results', type=Path)
+    parser.add_argument('--require-blocks', type=int, nargs='+', help='Require this exact block set in every observed group')
     args = parser.parse_args()
     if not args.results.is_dir():
         parser.error('Results folder does not exist')
-    print(json.dumps(aggregate(args.results), indent=2))
+    try:
+        result = aggregate(args.results, args.require_blocks)
+    except (ValueError, OSError) as exc:
+        parser.error(str(exc))
+    print(json.dumps(result, indent=2, allow_nan=False))
 
 
 if __name__ == '__main__':
