@@ -16,7 +16,7 @@ Jetson은 서빙과 성능 측정에, RTX 2080 Ti는 작업 어댑터와 라우�
 1. [영문 README](../README.md)의 Quick start에 따라 공식 EdgeLoRA 고정 커밋을 내려받고 연구 패치를 적용합니다.
 2. [학습·변환 안내](../training/README.md)를 따라 모델 파일을 준비합니다.
 3. `configs/runtime.example.json`을 `configs/runtime.json`으로 복사하고 로컬 모델 경로를 설정합니다.
-4. `python3 scripts/serve.py --mode combined`로 서버를 실행합니다.
+4. `python3 scripts/serve.py --config configs/runtime.json --mode combined --dry-run`으로 실행 명령과 경로를 확인한 뒤, `--dry-run`을 빼고 서버를 실행합니다.
 5. [실험 안내](experiments.md)에 따라 비교할 구성별로 서버를 재시작하고 같은 요청 조건을 적용합니다.
 
 실행 예제의 `--mode`와 요청의 `adapter_load_policy`를 함께 맞춰야 합니다. Async와 Combined는 `backend-async`, Baseline과 In-place는 `sync`를 사용합니다.
