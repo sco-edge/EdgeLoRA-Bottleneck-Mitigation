@@ -13,7 +13,7 @@ Jetson은 서빙과 성능 측정에, RTX 2080 Ti는 작업 어댑터와 라우�
 
 ## 실행 순서
 
-1. [영문 README](../README.md)의 Quick start에 따라 공식 EdgeLoRA 고정 커밋을 내려받고 연구 패치를 적용합니다.
+1. [영문 README](../README.md)의 Quick start에 따라 공식 EdgeLoRA 고정 커밋을 내려받아 연구 패치를 적용하고, `bash scripts/build_runtime.sh`로 런타임을 빌드합니다.
 2. [학습·변환 안내](../training/README.md)를 따라 모델 파일을 준비합니다.
 3. `configs/runtime.example.json`을 `configs/runtime.json`으로 복사하고 로컬 모델 경로를 설정합니다.
 4. `python3 scripts/serve.py --mode combined`로 서버를 실행합니다.
