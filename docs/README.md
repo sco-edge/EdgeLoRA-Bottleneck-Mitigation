@@ -16,6 +16,7 @@ four variants, recorded serving graph and quick start.
 | Inspect raw outputs and aggregates | [Result formats](results.md), [CSV dictionary](../experiments/paper_results/README.md) |
 | Compare generated outputs | [Output comparison](output-comparison.md) |
 | Inspect source and checkpoint identity | [Provenance](provenance.md) |
+| Check code and upstream license notices | [License](../LICENSE), [third-party notices](../THIRD_PARTY_NOTICES.md), [upstream license texts](../licenses/README.md) |
 | Run checks without GPU access | [Verification and CI](verification.md) |
 | Prepare a new measurement session | [Reproduction checklist](reproduction-checklist.md) |
 | Rebuild the PNG/SVG figures | [Plotting instructions](figures/README.md) |
