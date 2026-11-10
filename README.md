@@ -1,5 +1,7 @@
 # EdgeLoRA Bottleneck Mitigation
 
+[![Offline checks](https://github.com/sco-edge/EdgeLoRA-Bottleneck-Mitigation/actions/workflows/checks.yml/badge.svg)](https://github.com/sco-edge/EdgeLoRA-Bottleneck-Mitigation/actions/workflows/checks.yml)
+
 Research code for **Mitigating Bottlenecks in Batched Multi-Tenant LoRA Serving on Edge Devices**.
 
 Built on [EdgeLoRA](https://github.com/shenzheyu/EdgeLoRA), this project studies two sources of delay when several requests share a base model on a Jetson: preparing an adapter that is not resident in memory, and copying the output buffer while accumulating LoRA outputs.
