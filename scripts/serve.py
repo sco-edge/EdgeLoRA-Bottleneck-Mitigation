@@ -64,7 +64,7 @@ def main():
     parser.add_argument("--config", type=Path, default=ROOT / "configs/runtime.json")
     parser.add_argument("--mode", choices=MODES, default="combined")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8080, help="Port the server listens on.")
+    parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--dry-run", action="store_true", help="Print command without starting a server.")
     args = parser.parse_args()
     try:
