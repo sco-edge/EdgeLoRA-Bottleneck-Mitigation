@@ -10,7 +10,6 @@ class CliTests(unittest.TestCase):
         self.assertNotIn('Traceback',r.stderr)
 
     def test_launch_error_is_actionable(self):
-        import json
         from unittest.mock import patch
         from helpers import load
         serve = load('scripts/serve.py')
